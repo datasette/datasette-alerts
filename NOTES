@@ -1,0 +1,43 @@
+## Dev
+
+```sh
+ curl http://localhost:8001/-/datasette-alerts/api/new-alert \
+  -d '{
+    "database_name": "dbg",
+    "table_name": "permits",
+    "id_columns": ["id"],
+    "timestamp_column": "published_at",
+    "frequency": "2 seconds"
+  }'
+```
+
+```sh
+DATASETTE_SECRET=abc123 uv run \
+  --with-editable ".[test]" \
+  --with datasette-visible-internal-db \
+  --with datasette-write-ui \
+  datasette --plugins-dir=examples dbg.db --root
+```
+
+## Examples
+
+### SF Building Permits
+
+`Building_Permits_20250507.csv`, 1.2 million rows, 
+
+https://data.sfgov.org/Housing-and-Buildings/Building-Permits/i98e-djp9/about_data
+
+
+
+## Somerville Traffic Violations
+
+`Police_Data__Traffic_Citations_20250507.csv`
+
+https://data.somervillema.gov/Public-Safety/Police-Data-Traffic-Citations/3mqx-eye9/data_preview
+
+
+## Austin traffic incidents
+
+`Real-Time_Traffic_Incident_Reports_20250507.csv`
+
+https://data.austintexas.gov/Transportation-and-Mobility/Real-Time-Traffic-Incident-Reports/dx9v-zd7x/data_preview
