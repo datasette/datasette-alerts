@@ -12,11 +12,11 @@
 ```
 
 ```sh
-DATASETTE_SECRET=abc123 uv run \
-  --with-editable ".[test]" \
-  --with datasette-visible-internal-db \
-  --with datasette-write-ui \
-  datasette --plugins-dir=examples dbg.db --root
+
+```
+
+```sh
+sqlite3 dbg.db ".param set :type 'film'" '.read load-permits.sql'
 ```
 
 ## Examples

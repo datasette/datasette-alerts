@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+
+{% block content %}
+
+<h1>Create Alert</h1>
+
+<script>
+  function main() {
+    document.querySelectorAll('.da-notifier-form').forEach((form) => {
+      form.style.display = 'none';
+    });
+
+    document.querySelectorAll('.x').forEach((x) => {
+      x.addEventListener('change', (event) => {
+        const formSlug = event.target.value;
+        document.querySelectorAll('.da-notifier-form').forEach((form) => {
+          form.style.display = 'none';
+        });
+        const selectedForm = document.getElementById(`datasette-alerts-notifier-${formSlug}`);
+        if (selectedForm) {
+          selectedForm.style.display = 'block';
+        }
+      });
+    });
+
+      document.getElementById('myForm').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const formData = new FormData(this);
+        
+        const notifier_slug = formData.get('form');
+        
+        const notifierMeta = {};
+        formData.forEach((value, key) => {
+          if(key.startsWith(`${notifier_slug}-`)) {
+            notifierMeta[key.slice(`${notifier_slug}-`.length)] = value;
+          } 
+        });
+
+
+        
+        const body = {
+          database_name: formData.get('_database'),
+          table_name: formData.get('_table_name'),
+          id_columns: [formData.get('_id_column')],
+          timestamp_column: formData.get('_timestamp_column'),
+          frequency: formData.get('_frequency'),
+          subscriptions: [{
+            notifier_slug,
+            meta:  notifierMeta,
+          }]
+        };
+        console.log(data);
+        console.log(body);
+        fetch(`/-/datasette-alerts/api/new-alert`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': formData.get('csrftoken'),
+          },
+          body: JSON.stringify(body),
+        })
+      });
+
+
+  }
+  const data = {{ data | tojson }};
+  window.data = data;
+  document.addEventListener("DOMContentLoaded", main);
+
+</script>
+<form id="myForm">
+
+  <div>
+    <input type="text" name="_name" placeholder="Alert Name" required/>
+  </div>
+  <div>
+    <input type="text" name="_database" placeholder="Database" required/>
+  </div>
+  <div>
+    <input type="text" name="_slug" placeholder="Slug" required/>
+  </div>
+  <div>
+    <input type="text" name="_id_column" placeholder="Table name" required/>
+  </div>
+  <div>
+    <input type="text" name="_table_name" placeholder="Table name" required/>
+  </div>
+  <div>
+    <input type="text" name="_timestamp_column" placeholder="Timestamp column" required/>
+  </div>
+  <div>
+    <input type="text" name="_frequency" placeholder="Frequency" required/>
+  </div>
+
+  {% for form in forms %}
+    <label>
+      <input class="x" type="radio" name="form" value="{{ form.slug }}" {% if loop.first %}checked{% endif %}>
+      {{ form.name }}
+      {{form.icon | safe}} 
+    </label>
+  {% endfor %}
+
+  {% for form in forms %}
+    <div class="da-notifier-form" id="datasette-alerts-notifier-{{form.slug}}">
+    {% for field in form.html %}
+        <div class="label{% if field.errors %} errors{% endif %}">
+          {{ field.label }}
+        </div>
+        <div class="field{% if field.errors %} errors{% endif %}">
+          {{ field }}
+          {% if field.errors %}
+            <ul class="errors">
+              {% for error in field.errors %}
+                <li>{{ error }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          {% if field.description %}
+            <p style="font-size: 0.8em">{{ field.description }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+
+  <p>
+    <input type="hidden" name="csrftoken" value="{{ csrftoken() }}">
+    <input type="submit" value="Create Alert">
+  </p>
+</form>
+{% endblock %}

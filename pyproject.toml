@@ -15,6 +15,7 @@ dependencies = [
     "python-ulid>=3.0.0",
     "sqlite-migrate>=0.1b0",
     "sqlite-utils>=3.38",
+    "wtforms>=3.2.1",
 ]
 
 [build-system]
@@ -39,4 +40,3 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.setuptools.package-data]
 datasette_alerts = ["static/*", "templates/*"]
-
