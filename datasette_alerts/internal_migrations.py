@@ -37,7 +37,8 @@ def m001_initial(db: Database):
             id text primary key,
             alert_id text references datasette_alerts_alerts(id),
             logged_at timestamp default current_timestamp,
-            new_ids json
+            new_ids json,
+            cursor any
           );
         """
     )

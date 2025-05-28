@@ -99,17 +99,20 @@ async def bg_task(datasette):
                 raise Exception(f"Database {x.database_name} not found")
             result = await db.execute(
                 f"""
-            SELECT
-              {x.id_columns[0]},
-              {x.timestamp_column}
-            FROM {x.table_name}
-            WHERE {x.timestamp_column} >= ?
-          """,
-                [x.last_logged_at],
+                  SELECT
+                    {x.id_columns[0]},
+                    {x.timestamp_column}
+                  FROM {x.table_name}
+                  WHERE {x.timestamp_column} > ?
+                """,
+                [x.cursor],
             )
             new_ids = [row[0] for row in result]
-            print(x.alert_id, new_ids)
-            await internal_db.add_log(x.alert_id, new_ids)
+            cursor = max(
+                [row[1] for row in result], default=x.cursor
+            )
+            print(x.alert_id, new_ids, cursor)
+            await internal_db.add_log(x.alert_id, new_ids, cursor)
             await internal_db.schedule_next(x.alert_id)
 
             if len(new_ids) > 0:
@@ -117,7 +120,11 @@ async def bg_task(datasette):
                 print(subscriptions)
                 for subscription in subscriptions:
                     notifier = next(
-                        (n for n in await get_notifiers(datasette) if n.slug == subscription["notifier"]),
+                        (
+                            n
+                            for n in await get_notifiers(datasette)
+                            if n.slug == subscription["notifier"]
+                        ),
                         None,
                     )
                     if notifier is None:
@@ -125,7 +132,9 @@ async def bg_task(datasette):
                         continue
                     print(f"Sending {len(new_ids)} new ids to {notifier.name}")
                     new_ids = [str(id) for id in new_ids]
-                    await notifier.send(x.alert_id, new_ids, json.loads(subscription["meta"]))
+                    await notifier.send(
+                        x.alert_id, new_ids, json.loads(subscription["meta"])
+                    )
 
         await asyncio.sleep(1)
 
@@ -134,6 +143,7 @@ class NewSubscription(BaseModel):
     notifier_slug: str
     meta: dict
 
+
 class NewAlertRouteParameters(BaseModel):
     database_name: str
     table_name: str
@@ -141,7 +151,7 @@ class NewAlertRouteParameters(BaseModel):
     timestamp_column: str
     frequency: str
     subscriptions: List[NewSubscription] = []
-    
+
 
 class ReadyJobs(BaseModel):
     alert_id: str
@@ -150,13 +160,16 @@ class ReadyJobs(BaseModel):
     id_columns: List[str]
     timestamp_column: str
     last_logged_at: str
+    cursor: str
+
 
 class InternalDB:
     def __init__(self, internal_db: Database):
-      self.db = internal_db
-    
+        self.db = internal_db
+
     async def schedule_next(self, alert_id: str):
         """Schedules the next run of the alert by updating the next_deadline and resetting current_schedule_started_at."""
+
         def write(conn):
             with conn:
                 conn.execute(
@@ -172,44 +185,50 @@ class InternalDB:
         return await self.db.execute_write_fn(write)
 
     async def alert_subscriptions(self, alert_id: str):
-      """ Fetches all subscriptions for the given alert ID, returning the notifier slug and metadata. """
-      def x(conn):
-          with conn:
-              results = conn.execute(
-                  """
+        """Fetches all subscriptions for the given alert ID, returning the notifier slug and metadata."""
+
+        def x(conn):
+            with conn:
+                results = conn.execute(
+                    """
                   SELECT notifier, meta
                   FROM datasette_alerts_subscriptions
                   WHERE alert_id = ?
                   """,
-                  [alert_id],
-              ).fetchall()
-              return [{"notifier": notifier, "meta": meta} for notifier, meta in results]
-      
-      return (await self.db.execute_write_fn(x))
-    
-    async def add_log(self, alert_id: str, new_ids: List[str]):
-        """ Adds a log entry for the alert with the new IDs. """
+                    [alert_id],
+                ).fetchall()
+                return [
+                    {"notifier": notifier, "meta": meta} for notifier, meta in results
+                ]
+
+        return await self.db.execute_write_fn(x)
+
+    async def add_log(self, alert_id: str, new_ids: List[str], cursor: str):
+        """Adds a log entry for the alert with the new IDs."""
+
         def write(conn):
             with conn:
                 conn.execute(
                     """
-                      INSERT INTO datasette_alerts_alert_logs(id, alert_id, new_ids)
-                      VALUES (?, ?, json(?))
+                      INSERT INTO datasette_alerts_alert_logs(id, alert_id, new_ids, cursor)
+                      VALUES (?, ?, json(?), ?)
                     """,
                     (
                         ulid_new(),
                         alert_id,
                         json.dumps(new_ids),
+                        cursor
                     ),
                 )
 
         return await self.db.execute_write_fn(write)
 
-    async def start_ready_jobs(self)-> List[ReadyJobs]:
-        """ Fetches all alerts that are ready to be processed.
+    async def start_ready_jobs(self) -> List[ReadyJobs]:
+        """Fetches all alerts that are ready to be processed.
         An alert is ready if its next_deadline is in the past and it has not been started yet.
         Returns a list of ReadyJobs objects containing the alert details.
         """
+
         def write(conn):
             with conn:
                 rows = conn.execute(
@@ -229,14 +248,14 @@ class InternalDB:
 
                 jobs = []
                 for row in rows:
-                    last_logged_at = conn.execute(
+                    last_logged_at, cursor = conn.execute(
                         """
-                      SELECT max(logged_at) 
+                      SELECT max(logged_at), cursor
                       FROM datasette_alerts_alert_logs
                       WHERE alert_id = ?
                     """,
                         [row[0]],
-                    ).fetchone()[0]
+                    ).fetchone()
 
                     jobs.append(
                         ReadyJobs(
@@ -246,6 +265,7 @@ class InternalDB:
                             id_columns=json.loads(row[3]),
                             timestamp_column=row[4],
                             last_logged_at=last_logged_at,
+                            cursor=cursor
                         )
                     )
 
@@ -253,8 +273,9 @@ class InternalDB:
 
         return await self.db.execute_write_fn(write)
 
-    async def new_alert(self, params: NewAlertRouteParameters) -> str:
-        """ Creates a new alert with the given parameters and returns the alert ID. """
+    async def new_alert(self, params: NewAlertRouteParameters, cursor: str) -> str:
+        """Creates a new alert with the given parameters and returns the alert ID."""
+
         def write(conn):
             with conn:
                 alert_id = conn.execute(
@@ -289,10 +310,10 @@ class InternalDB:
 
                 conn.execute(
                     """
-                    INSERT INTO datasette_alerts_alert_logs(id, alert_id, new_ids)
-                    VALUES (?, ?, json_array())
+                    INSERT INTO datasette_alerts_alert_logs(id, alert_id, new_ids, cursor)
+                    VALUES (?, ?, json_array(), ?)
                   """,
-                    [ulid_new(), alert_id],
+                    [ulid_new(), alert_id, cursor],
                 )
             return alert_id
 
@@ -310,9 +331,17 @@ class Routes:
             )
         except ValueError as e:
             return Response.json({"ok": False}, status=400)
-        
+
+        db = datasette.databases.get(params.database_name)
+        if db is None:
+            return Response.json(
+                {"ok": False, "error": f"Database {params.database_name} not found"},
+                status=404,
+            )
+        result = await db.execute(f'select max({params.timestamp_column}) from {params.table_name}')
+        cursor = result.rows[0][0]
         internal_db = InternalDB(datasette.get_internal_database())
-        alert_id = await internal_db.new_alert(params)
+        alert_id = await internal_db.new_alert(params, cursor)
         return Response.json({"ok": True, "data": {"alert_id": alert_id}})
 
     async def new_alert(scope, receive, datasette, request):
@@ -330,18 +359,17 @@ class Routes:
                     "name": notifier.name,
                 }
             )
-            data.append({
-              "slug": notifier.slug,
-              "icon": notifier.icon,
-              "name": notifier.name,
-            })
+            data.append(
+                {
+                    "slug": notifier.slug,
+                    "icon": notifier.icon,
+                    "name": notifier.name,
+                }
+            )
         return Response.html(
             await datasette.render_template(
                 "tmp.html",
-                {
-                    "forms": forms,
-                    "data": data
-                },
+                {"forms": forms, "data": data},
             )
         )
 
