@@ -54,15 +54,6 @@ async def startup(datasette):
 
     await datasette.get_internal_database().execute_write_fn(migrate)
 
-    for database in datasette.databases.values():
-        # await database.execute_fn(attach_alert_db)
-        pass
-        # await database.execute_write_fn(migrate)
-    # loop = asyncio.get_running_loop()
-    # asyncio.create_task(bg_task(datasette))
-    # print(4)
-
-
 @hookimpl
 async def query_actions(datasette, actor, database, query_name):
     return [
@@ -76,17 +67,13 @@ def asgi_wrapper(datasette):
         @wraps(app)
         async def record_last_request(scope, receive, send):
             if not hasattr(datasette, "_alertx"):
-                start_that_loop(datasette)
+                asyncio.create_task(bg_task(datasette))
             datasette._alertx = 1
             await app(scope, receive, send)
 
         return record_last_request
 
     return wrap_with_alerts
-
-
-def start_that_loop(datasette):
-    asyncio.create_task(bg_task(datasette))
 
 
 async def bg_task(datasette):
