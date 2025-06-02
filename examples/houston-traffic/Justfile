@@ -1,0 +1,7 @@
+dev:
+  uv run \
+    --with-editable '../..' \
+    datasette \
+      --root \
+      --plugins-dir=../sample-notifiers \
+      incidents.db -p 8003
