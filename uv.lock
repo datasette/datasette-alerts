@@ -166,7 +166,7 @@ wheels = [
 
 [[package]]
 name = "datasette-alerts"
-version = "0.1"
+version = "0.0.1a1"
 source = { editable = "." }
 dependencies = [
     { name = "datasette" },
