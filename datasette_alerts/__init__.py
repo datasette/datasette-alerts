@@ -12,7 +12,7 @@ from datasette.utils import await_me_maybe
 from datasette import hookimpl
 from datasette.plugins import pm
 from pydantic import BaseModel
-from typing import List
+from typing import List, Union
 
 pm.add_hookspecs(hookspecs)
 
@@ -149,7 +149,7 @@ class ReadyJobs(BaseModel):
     id_columns: List[str]
     timestamp_column: str
     last_logged_at: str
-    cursor: str | int
+    cursor: Union[str, int]
 
 
 class InternalDB:
