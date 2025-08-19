@@ -16,6 +16,8 @@ from typing import List
 
 pm.add_hookspecs(hookspecs)
 
+PERMISSION_ACCESS_NAME = "datasette-alerts-access"
+
 
 class Notifier(ABC):
     @property
@@ -147,7 +149,7 @@ class ReadyJobs(BaseModel):
     id_columns: List[str]
     timestamp_column: str
     last_logged_at: str
-    cursor: str
+    cursor: str | int
 
 
 class InternalDB:
@@ -364,6 +366,25 @@ class Routes:
 @hookimpl
 def register_routes():
     return [
+        # TODO permission gate these routes
         (r"^/-/datasette-alerts/new-alert$", Routes.new_alert),
         (r"^/-/datasette-alerts/api/new-alert$", Routes.api_new_alert),
     ]
+
+@hookimpl
+def table_actions(datasette, actor, database, table, request):
+    async def check():
+      allowed = await datasette.permission_allowed(
+          request.actor, PERMISSION_ACCESS_NAME, default=False
+      )
+      if allowed:
+          return [
+              {
+                  "href": datasette.urls.path(
+                      f"/-/datasette-alerts/new-alert?db_name={database}&table_name={table}"
+                  ),
+                  "label": "Configure new alert",
+                  "description": "",
+              }
+          ]
+    return check

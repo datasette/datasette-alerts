@@ -1,12 +1,37 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<script src="{{ urls.static_plugins("datasette_alerts", "alerts/index.min.js") }}"></script>
+<link   href="{{ urls.static_plugins("datasette_alerts", "alerts/index.min.css") }}" rel="stylesheet" />
+{% endblock %}
+
+
 
 {% block content %}
 
-<h1>Create Alert</h1>
+<div id="root"></div>
 
+
+<h1>Create Alert</h1>
 <script>
-  function main() {
+  async function main() {
+
+    const params = new URLSearchParams(window.location.search);
+    if(params.has("db_name") && params.has("table_name")) {
+      document.querySelector('input[name="_database"]').value = params.get("db_name");
+      document.querySelector('input[name="_table_name"]').value = params.get("table_name");
+      const sql = "select * from pragma_table_xinfo(:table)"
+      const columns = await fetch(`/${params.get("db_name")}/-/query.json?sql=${sql}&table=${params.get("table_name")}&_shape=array`).then( r => r.json());
+      document.querySelector('input[name="_id_column"]').value = columns.filter(c=>c.pk).map(c=>c.name).join(',');
+      const tsColumn = columns.find(d=>d.name.endsWith("_at") || d.name.endsWith("_date") || d.name.endsWith("timestamp") || d.name.endsWith("time"));
+      if(tsColumn) {
+        document.querySelector('input[name="_timestamp_column"]').value = tsColumn.name;
+      }
+      else if(columns.length == 1) {
+        document.querySelector('input[name="_timestamp_column"]').value = columns[0].name;
+      }
+    }
+
     document.querySelectorAll('.da-notifier-form').forEach((form) => {
       form.style.display = 'none';
     });

@@ -1,0 +1,29 @@
+{
+  "name": "datasette-alerts",
+  "version": "1.0.0",
+  "description": "[![PyPI](https://img.shields.io/pypi/v/datasette-alerts.svg)](https://pypi.org/project/datasette-alerts/) [![Changelog](https://img.shields.io/github/v/release/datasette/datasette-alerts?include_prereleases&label=changelog)](https://github.com/datasette/datasette-alerts/releases) [![Tests](https://github.com/datasette/datasette-alerts/actions/workflows/test.yml/badge.svg)](https://github.com/datasette/datasette-alerts/actions/workflows/test.yml) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/datasette/datasette-alerts/blob/main/LICENSE)",
+  "main": "index.js",
+  "directories": {
+    "example": "examples",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/datasette/datasette-alerts.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/datasette/datasette-alerts/issues"
+  },
+  "homepage": "https://github.com/datasette/datasette-alerts#readme",
+  "dependencies": {
+    "@preact/signals": "^2.2.0",
+    "esbuild": "^0.25.5",
+    "preact": "^10.26.8"
+  }
+}

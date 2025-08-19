@@ -1,0 +1,8 @@
+dev:
+  uv run \
+    --with-editable '../..' \
+    --with notify-py \
+    datasette \
+      --root \
+      --plugins-dir=../sample-notifiers \
+      docs.db -p 8002

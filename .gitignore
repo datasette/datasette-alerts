@@ -15,3 +15,5 @@ build
 *.db
 *.csv
 .env
+
+node_modules

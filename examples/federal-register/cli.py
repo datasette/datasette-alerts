@@ -10,6 +10,7 @@ import click
 import sqlite3
 import httpx 
 import json
+from datetime import date
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS federal_register_documents(
@@ -41,12 +42,31 @@ def cli():
     """Federal Register data processing tools."""
     pass
 
+def backfill_agencies(db):
+    """Backfill Federal Register agencies into the database."""
+    response = httpx.get("https://www.federalregister.gov/api/v1/agencies").json()
+    
+    with db:
+        for agency in response:
+            db.execute(
+                "INSERT OR IGNORE INTO federal_register_agencies (id, parent_id, slug, name, short_name, description, url, child_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    agency['id'],
+                    agency.get('parent_id'),
+                    agency['slug'],
+                    agency['name'],
+                    agency.get('short_name', ''),
+                    agency.get('description', ''),
+                    agency.get('url', ''),
+                    json.dumps(agency.get('child_ids', []))
+                )
+            )
 
 @cli.command()
-@click.option("-o", "--output", required=True, help="Output database path")
-@click.option("--until", required=True, type=click.DateTime(formats=["%Y-%m-%d"]), 
-              help="End date in YYYY-MM-DD format")
-def backfill(output, until):
+@click.argument("output")
+@click.option("--until", required=False, type=click.DateTime(formats=["%Y-%m-%d"]), 
+              help="End date in YYYY-MM-DD format", default=date.today())
+def sync(output, until):
     """Backfill Federal Register data into a database."""
     click.echo(f"Backfilling data to {output} until {until.strftime('%Y-%m-%d')}")
     db = sqlite3.connect(output)
@@ -56,24 +76,8 @@ def backfill(output, until):
     agency_id = db.execute("select id from federal_register_agencies limit 1").fetchone()
     
     if not agency_id:
-      agencies = httpx.get("https://www.federalregister.gov/api/v1/agencies").json()
+      backfill_agencies(db)
       
-      with db:
-        for agency in agencies:
-          db.execute(
-              "INSERT INTO federal_register_agencies (id, parent_id, slug, name, short_name, description, url, child_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-              (
-                  agency['id'],
-                  agency.get('parent_id'),
-                  agency['slug'],
-                  agency['name'],
-                  agency.get('short_name', ''),
-                  agency.get('description', ''),
-                  agency.get('url', ''),
-                  json.dumps(agency.get('child_ids', []))
-              )
-          )
-        
     response = httpx.get(f"https://www.federalregister.gov/api/v1/documents.json?per_page=1000&conditions[publication_date][lte]={until}").json()
     
     changes = 0
@@ -106,14 +110,6 @@ def backfill(output, until):
           changes += db.execute('select changes()').fetchone()[0]
 
     click.echo("Loaded {} documents into the database.".format(changes))
-
-
-
-@cli.command()
-@click.argument("database")
-def update(database):
-    """Update database with latest Federal Register entries."""
-    click.echo(f"Updating database: {database}")
 
 
 def main() -> None:

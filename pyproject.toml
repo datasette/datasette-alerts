@@ -11,8 +11,8 @@ classifiers=[
 requires-python = ">=3.9"
 dependencies = [
     "datasette>=1.0a19",
-    "pydantic>=2.11.4",
-    "python-ulid>=3.0.0",
+    "pydantic>=2",
+    "python-ulid>=3",
     "sqlite-migrate>=0.1b0",
     "sqlite-utils>=3.38",
     "wtforms>=3.2.1",
@@ -40,3 +40,10 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.setuptools.package-data]
 datasette_alerts = ["static/*", "templates/*"]
+
+
+# find exclude node_modules
+[tool.setuptools.packages.find]
+exclude = [
+    "node_modules",
+]
