@@ -384,7 +384,7 @@ def table_actions(datasette, actor, database, table, request):
                       f"/-/datasette-alerts/new-alert?db_name={database}&table_name={table}"
                   ),
                   "label": "Configure new alert",
-                  "description": "",
+                  "description": "Receive notifications when new records are added or changed to this table",
               }
           ]
     return check
