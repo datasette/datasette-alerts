@@ -1,6 +1,6 @@
 [project]
 name = "datasette-alerts"
-version = "0.0.1a3"
+version = "0.0.1a4"
 description = "Setup alerts on specfic new records."
 readme = "README.md"
 authors = [{name = "Alex Garcia"}]
