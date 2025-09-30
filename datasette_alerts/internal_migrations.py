@@ -1,12 +1,7 @@
 from sqlite_utils import Database
 from sqlite_migrate import Migrations
-from pathlib import Path
 
 internal_migrations = Migrations("datasette-alerts.internal")
-
-
-ALERTS_TABLE = "datasette_alerts_alerts"
-ALERT_LOGS_TABLE = "datasette_alerts_alert_logs"
 
 
 @internal_migrations()
