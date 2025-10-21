@@ -1,6 +1,6 @@
 [project]
 name = "datasette-alerts"
-version = "0.0.1a4"
+version = "0.0.1a5"
 description = "Setup alerts on specfic new records."
 readme = "README.md"
 authors = [{name = "Alex Garcia"}]
@@ -10,7 +10,7 @@ classifiers=[
 ]
 requires-python = ">=3.9"
 dependencies = [
-    "datasette>=1.0a19",
+    "datasette==1.0a19",
     "pydantic>=2",
     "python-ulid>=3",
     "sqlite-migrate>=0.1b0",
