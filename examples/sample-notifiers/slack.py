@@ -1,9 +1,10 @@
 # https://icons.getbootstrap.com/icons/slack/
-#raise Exception("bruh2")
+# raise Exception("bruh2")
 from datasette import hookimpl
 from datasette_alerts import Notifier
 import httpx
 from wtforms import Form, StringField
+
 
 @hookimpl
 def datasette_alerts_register_notifiers(datasette):
@@ -18,20 +19,20 @@ class SlackNotifier(Notifier):
 
     def __init__(self):
         pass
-    
+
     async def get_config_form(self):
         class ConfigForm(Form):
             webhook_url = StringField(
                 "Webhook URL",
-                render_kw={"placeholder":"https://hooks.slack.com/services/..."},
+                render_kw={"placeholder": "https://hooks.slack.com/services/..."},
                 description="",
             )
 
         return ConfigForm
 
     async def send(self, alert_id, new_ids, config: dict):
-      url = config["webhook_url"]
-      text = f"{len(new_ids)} new items in {'TODO'}"
-      # https://api.slack.com/surfaces/messages#payloads
-      json={"text": text}
-      httpx.post(url,json=json)
+        url = config["webhook_url"]
+        text = f"{len(new_ids)} new items in {'TODO'}"
+        # https://api.slack.com/surfaces/messages#payloads
+        json = {"text": text}
+        httpx.post(url, json=json)

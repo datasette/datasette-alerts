@@ -33,7 +33,6 @@ class DesktopNotifier(Notifier):
         message = f"{len(new_ids)} new items in {'TODO'}"
         print(message)
         notification = Notify()
-        notification.title = config['title']
+        notification.title = config["title"]
         notification.message = message
         notification.send()
-

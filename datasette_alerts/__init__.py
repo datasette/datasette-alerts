@@ -56,6 +56,7 @@ async def startup(datasette):
 
     await datasette.get_internal_database().execute_write_fn(migrate)
 
+
 @hookimpl
 async def query_actions(datasette, actor, database, query_name):
     return [
@@ -97,9 +98,7 @@ async def bg_task(datasette):
                 [x.cursor],
             )
             new_ids = [row[0] for row in result]
-            cursor = max(
-                [row[1] for row in result], default=x.cursor
-            )
+            cursor = max([row[1] for row in result], default=x.cursor)
             print(x.alert_id, new_ids, cursor)
             await internal_db.add_log(x.alert_id, new_ids, cursor)
             await internal_db.schedule_next(x.alert_id)
@@ -202,12 +201,7 @@ class InternalDB:
                       INSERT INTO datasette_alerts_alert_logs(id, alert_id, new_ids, cursor)
                       VALUES (?, ?, json(?), ?)
                     """,
-                    (
-                        ulid_new(),
-                        alert_id,
-                        json.dumps(new_ids),
-                        cursor
-                    ),
+                    (ulid_new(), alert_id, json.dumps(new_ids), cursor),
                 )
 
         return await self.db.execute_write_fn(write)
@@ -254,7 +248,7 @@ class InternalDB:
                             id_columns=json.loads(row[3]),
                             timestamp_column=row[4],
                             last_logged_at=last_logged_at,
-                            cursor=cursor
+                            cursor=cursor,
                         )
                     )
 
@@ -327,7 +321,9 @@ class Routes:
                 {"ok": False, "error": f"Database {params.database_name} not found"},
                 status=404,
             )
-        result = await db.execute(f'select max({params.timestamp_column}) from {params.table_name}')
+        result = await db.execute(
+            f"select max({params.timestamp_column}) from {params.table_name}"
+        )
         cursor = result.rows[0][0]
         internal_db = InternalDB(datasette.get_internal_database())
         alert_id = await internal_db.new_alert(params, cursor)
@@ -371,20 +367,22 @@ def register_routes():
         (r"^/-/datasette-alerts/api/new-alert$", Routes.api_new_alert),
     ]
 
+
 @hookimpl
 def table_actions(datasette, actor, database, table, request):
     async def check():
-      allowed = await datasette.permission_allowed(
-          request.actor, PERMISSION_ACCESS_NAME, default=False
-      )
-      if allowed:
-          return [
-              {
-                  "href": datasette.urls.path(
-                      f"/-/datasette-alerts/new-alert?db_name={database}&table_name={table}"
-                  ),
-                  "label": "Configure new alert",
-                  "description": "Receive notifications when new records are added or changed to this table",
-              }
-          ]
+        allowed = await datasette.permission_allowed(
+            request.actor, PERMISSION_ACCESS_NAME, default=False
+        )
+        if allowed:
+            return [
+                {
+                    "href": datasette.urls.path(
+                        f"/-/datasette-alerts/new-alert?db_name={database}&table_name={table}"
+                    ),
+                    "label": "Configure new alert",
+                    "description": "Receive notifications when new records are added or changed to this table",
+                }
+            ]
+
     return check
