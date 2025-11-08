@@ -1,5 +1,10 @@
 from datasette.app import Datasette
-from datasette_alerts import Notifier, InternalDB, NewAlertRouteParameters, NewSubscription
+from datasette_alerts import (
+    Notifier,
+    InternalDB,
+    NewAlertRouteParameters,
+    NewSubscription,
+)
 from wtforms import Form, StringField
 import pytest
 import pytest_asyncio
@@ -27,16 +32,16 @@ class MockNotifier(Notifier):
 
     async def send(self, alert_id, new_ids, meta):
         """Record sent messages for testing."""
-        self.sent_messages.append({
-            "alert_id": alert_id,
-            "new_ids": new_ids,
-            "meta": meta
-        })
+        self.sent_messages.append(
+            {"alert_id": alert_id, "new_ids": new_ids, "meta": meta}
+        )
 
     async def get_config_form(self):
         """Return a simple config form."""
+
         class ConfigForm(Form):
             url = StringField("URL")
+
         return ConfigForm
 
 
@@ -46,21 +51,27 @@ async def datasette(tmpdir):
     data = str(tmpdir / "data.db")
     db = sqlite3.connect(data)
     with db:
-        db.execute("""
+        db.execute(
+            """
             create table events (
                 id integer primary key,
                 title text,
                 created_at timestamp default current_timestamp
             )
-        """)
-        db.execute("""
+        """
+        )
+        db.execute(
+            """
             insert into events (title, created_at)
             values ('Event 1', '2024-01-01 10:00:00')
-        """)
-        db.execute("""
+        """
+        )
+        db.execute(
+            """
             insert into events (title, created_at)
             values ('Event 2', '2024-01-01 11:00:00')
-        """)
+        """
+        )
 
     datasette = Datasette([data])
     datasette._test_db = db
@@ -97,10 +108,9 @@ async def test_internal_db_new_alert(datasette):
         frequency="+1 hour",
         subscriptions=[
             NewSubscription(
-                notifier_slug="test-notifier",
-                meta={"url": "https://example.com"}
+                notifier_slug="test-notifier", meta={"url": "https://example.com"}
             )
-        ]
+        ],
     )
 
     alert_id = await internal_db.new_alert(params, "2024-01-01 11:00:00")
@@ -111,8 +121,7 @@ async def test_internal_db_new_alert(datasette):
     # Check alert details
     db = datasette.get_internal_database()
     result = await db.execute(
-        "SELECT * FROM datasette_alerts_alerts WHERE id = ?",
-        [alert_id]
+        "SELECT * FROM datasette_alerts_alerts WHERE id = ?", [alert_id]
     )
     alert = dict(result.first())
 
@@ -124,8 +133,7 @@ async def test_internal_db_new_alert(datasette):
 
     # Check subscription was created
     subscriptions = await db.execute(
-        "SELECT * FROM datasette_alerts_subscriptions WHERE alert_id = ?",
-        [alert_id]
+        "SELECT * FROM datasette_alerts_subscriptions WHERE alert_id = ?", [alert_id]
     )
     sub = dict(subscriptions.first())
     assert sub["notifier"] == "test-notifier"
@@ -133,8 +141,7 @@ async def test_internal_db_new_alert(datasette):
 
     # Check initial log entry was created
     logs = await db.execute(
-        "SELECT * FROM datasette_alerts_alert_logs WHERE alert_id = ?",
-        [alert_id]
+        "SELECT * FROM datasette_alerts_alert_logs WHERE alert_id = ?", [alert_id]
     )
     log = dict(logs.first())
     assert json.loads(log["new_ids"]) == []
@@ -153,15 +160,9 @@ async def test_internal_db_alert_subscriptions(datasette):
         timestamp_column="created_at",
         frequency="+1 hour",
         subscriptions=[
-            NewSubscription(
-                notifier_slug="notifier1",
-                meta={"key1": "value1"}
-            ),
-            NewSubscription(
-                notifier_slug="notifier2",
-                meta={"key2": "value2"}
-            )
-        ]
+            NewSubscription(notifier_slug="notifier1", meta={"key1": "value1"}),
+            NewSubscription(notifier_slug="notifier2", meta={"key2": "value2"}),
+        ],
     )
 
     alert_id = await internal_db.new_alert(params, "2024-01-01 00:00:00")
@@ -187,7 +188,7 @@ async def test_internal_db_add_log(datasette):
         id_columns=["id"],
         timestamp_column="created_at",
         frequency="+1 hour",
-        subscriptions=[]
+        subscriptions=[],
     )
 
     alert_id = await internal_db.new_alert(params, "2024-01-01 00:00:00")
@@ -199,7 +200,7 @@ async def test_internal_db_add_log(datasette):
     db = datasette.get_internal_database()
     logs = await db.execute(
         "SELECT * FROM datasette_alerts_alert_logs WHERE alert_id = ? ORDER BY logged_at ASC",
-        [alert_id]
+        [alert_id],
     )
     rows = list(logs.rows)
 
@@ -228,7 +229,7 @@ async def test_internal_db_schedule_next(datasette):
         id_columns=["id"],
         timestamp_column="created_at",
         frequency="+1 hour",
-        subscriptions=[]
+        subscriptions=[],
     )
 
     alert_id = await internal_db.new_alert(params, "2024-01-01 00:00:00")
@@ -237,7 +238,7 @@ async def test_internal_db_schedule_next(datasette):
     db = datasette.get_internal_database()
     await db.execute_write(
         "UPDATE datasette_alerts_alerts SET current_schedule_started_at = datetime('now') WHERE id = ?",
-        [alert_id]
+        [alert_id],
     )
 
     # Schedule next run
@@ -246,7 +247,7 @@ async def test_internal_db_schedule_next(datasette):
     # Verify next_deadline was updated and current_schedule_started_at was cleared
     result = await db.execute(
         "SELECT next_deadline, current_schedule_started_at FROM datasette_alerts_alerts WHERE id = ?",
-        [alert_id]
+        [alert_id],
     )
     row = dict(result.first())
 
@@ -268,7 +269,7 @@ async def test_internal_db_start_ready_jobs(datasette):
         id_columns=["id"],
         timestamp_column="created_at",
         frequency="+1 hour",
-        subscriptions=[]
+        subscriptions=[],
     )
 
     alert_id = await internal_db.new_alert(params, "2024-01-01 00:00:00")
@@ -276,7 +277,7 @@ async def test_internal_db_start_ready_jobs(datasette):
     # Set the deadline to the past
     await db.execute_write(
         "UPDATE datasette_alerts_alerts SET next_deadline = datetime('now', '-1 hour') WHERE id = ?",
-        [alert_id]
+        [alert_id],
     )
 
     # Get ready jobs
@@ -294,7 +295,7 @@ async def test_internal_db_start_ready_jobs(datasette):
     # Verify current_schedule_started_at was set
     result = await db.execute(
         "SELECT current_schedule_started_at FROM datasette_alerts_alerts WHERE id = ?",
-        [alert_id]
+        [alert_id],
     )
     row = dict(result.first())
     assert row["current_schedule_started_at"] is not None
@@ -310,16 +311,12 @@ async def test_api_new_alert_endpoint(datasette):
         "timestamp_column": "created_at",
         "frequency": "+1 hour",
         "subscriptions": [
-            {
-                "notifier_slug": "test-notifier",
-                "meta": {"url": "https://example.com"}
-            }
-        ]
+            {"notifier_slug": "test-notifier", "meta": {"url": "https://example.com"}}
+        ],
     }
 
     response = await datasette.client.post(
-        "/-/datasette-alerts/api/new-alert",
-        json=payload
+        "/-/datasette-alerts/api/new-alert", json=payload
     )
 
     assert response.status_code == 200
@@ -331,8 +328,7 @@ async def test_api_new_alert_endpoint(datasette):
     alert_id = data["data"]["alert_id"]
     db = datasette.get_internal_database()
     result = await db.execute(
-        "SELECT * FROM datasette_alerts_alerts WHERE id = ?",
-        [alert_id]
+        "SELECT * FROM datasette_alerts_alerts WHERE id = ?", [alert_id]
     )
     alert = dict(result.first())
     assert alert["table_name"] == "events"
@@ -347,12 +343,11 @@ async def test_api_new_alert_invalid_database(datasette):
         "id_columns": ["id"],
         "timestamp_column": "created_at",
         "frequency": "+1 hour",
-        "subscriptions": []
+        "subscriptions": [],
     }
 
     response = await datasette.client.post(
-        "/-/datasette-alerts/api/new-alert",
-        json=payload
+        "/-/datasette-alerts/api/new-alert", json=payload
     )
 
     assert response.status_code == 404
@@ -365,8 +360,7 @@ async def test_api_new_alert_invalid_database(datasette):
 async def test_api_new_alert_invalid_payload(datasette):
     """Test API endpoint with invalid payload."""
     response = await datasette.client.post(
-        "/-/datasette-alerts/api/new-alert",
-        json={"invalid": "payload"}
+        "/-/datasette-alerts/api/new-alert", json={"invalid": "payload"}
     )
 
     assert response.status_code == 400
@@ -377,9 +371,7 @@ async def test_api_new_alert_invalid_payload(datasette):
 @pytest.mark.asyncio
 async def test_api_new_alert_wrong_method(datasette):
     """Test API endpoint with GET instead of POST."""
-    response = await datasette.client.get(
-        "/-/datasette-alerts/api/new-alert"
-    )
+    response = await datasette.client.get("/-/datasette-alerts/api/new-alert")
 
     assert response.status_code == 405
 
@@ -388,9 +380,7 @@ async def test_api_new_alert_wrong_method(datasette):
 async def test_register_routes(datasette):
     """Test that routes are registered."""
     # Test that the new-alert page exists
-    response = await datasette.client.get(
-        "/-/datasette-alerts/new-alert"
-    )
+    response = await datasette.client.get("/-/datasette-alerts/new-alert")
     # Should return 200 (even without notifiers)
     assert response.status_code == 200
 
