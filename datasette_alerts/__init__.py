@@ -11,6 +11,7 @@ from . import hookspecs
 from datasette.utils import await_me_maybe
 from datasette import hookimpl
 from datasette.plugins import pm
+from datasette.permissions import Action
 from pydantic import BaseModel
 from typing import List, Union
 
@@ -46,6 +47,16 @@ async def get_notifiers(datasette) -> List[Notifier]:
         result = await await_me_maybe(result)
         notifiers.extend(result)
     return notifiers
+
+
+@hookimpl
+def register_actions():
+    return [
+        Action(
+            name=PERMISSION_ACCESS_NAME,
+            description="Access datasette-alerts functionality",
+        )
+    ]
 
 
 @hookimpl
@@ -371,8 +382,8 @@ def register_routes():
 @hookimpl
 def table_actions(datasette, actor, database, table, request):
     async def check():
-        allowed = await datasette.permission_allowed(
-            request.actor, PERMISSION_ACCESS_NAME, default=False
+        allowed = await datasette.allowed(
+            actor=request.actor, action=PERMISSION_ACCESS_NAME
         )
         if allowed:
             return [

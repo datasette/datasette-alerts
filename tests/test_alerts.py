@@ -374,3 +374,36 @@ async def test_api_new_alert_wrong_method(datasette):
     response = await datasette.client.get("/-/datasette-alerts/api/new-alert")
 
     assert response.status_code == 405
+
+
+@pytest.mark.asyncio
+async def test_table_action_link_with_permission(datasette):
+    """Test that the table action link appears when user has permission."""
+    # Set root_enabled to allow root permissions
+    datasette.root_enabled = True
+
+    # Create a signed cookie for root user
+    cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
+
+    # Visit the table page
+    response = await datasette.client.get("/data/events", cookies=cookies)
+    assert response.status_code == 200
+
+    # Check that the alert configuration link is present
+    assert "Configure new alert" in response.text
+    assert (
+        "/-/datasette-alerts/new-alert?db_name=data&amp;table_name=events"
+        in response.text
+    )
+
+
+@pytest.mark.asyncio
+async def test_table_action_link_without_permission(datasette):
+    """Test that the table action link does not appear without permission."""
+    # Visit the table page without authentication
+    response = await datasette.client.get("/data/events")
+    assert response.status_code == 200
+
+    # Check that the alert configuration link is NOT present
+    assert "Configure new alert" not in response.text
+    assert "datasette-alerts/new-alert" not in response.text
