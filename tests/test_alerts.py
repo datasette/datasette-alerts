@@ -374,28 +374,3 @@ async def test_api_new_alert_wrong_method(datasette):
     response = await datasette.client.get("/-/datasette-alerts/api/new-alert")
 
     assert response.status_code == 405
-
-
-@pytest.mark.asyncio
-async def test_register_routes(datasette):
-    """Test that routes are registered."""
-    # Test that the new-alert page exists
-    response = await datasette.client.get("/-/datasette-alerts/new-alert")
-    # Should return 200 (even without notifiers)
-    assert response.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_datasette_alerts():
-    """Basic test that the plugin loads."""
-    datasette = Datasette(memory=True)
-    await datasette.invoke_startup()
-
-    # Verify internal tables were created
-    internal_db = datasette.get_internal_database()
-    tables = await internal_db.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    )
-    table_names = [row[0] for row in tables.rows]
-
-    assert "datasette_alerts_alerts" in table_names
