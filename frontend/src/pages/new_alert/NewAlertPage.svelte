@@ -1,6 +1,10 @@
 <script lang="ts">
+  import createClient from "openapi-fetch";
+  import type { paths } from "../../../api.d.ts";
   import { loadPageData } from "../../page_data/load";
   import type { NewAlertPageData } from "../../page_data/NewAlertPageData.types";
+
+  const client = createClient<paths>({ baseUrl: "/" });
 
   const pageData = loadPageData<NewAlertPageData>();
   const notifiers = pageData.notifiers ?? [];
@@ -91,25 +95,15 @@
         ],
       };
 
-      const csrfToken = document.querySelector<HTMLMetaElement>(
-        'input[name="csrftoken"]',
-      )?.value;
-
-      const resp = await fetch("/-/datasette-alerts/api/new-alert", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
-        },
-        body: JSON.stringify(body),
-      });
-
-      const data = await resp.json();
-      if (!data.ok) {
-        error = data.error ?? "Unknown error";
+      const { data, error: apiError } = await client.POST(
+        "/-/datasette-alerts/api/new-alert",
+        { body },
+      );
+      if (apiError) {
+        error = (apiError as Record<string, string>).error ?? "Unknown error";
         return;
       }
-      success = `Alert created (ID: ${data.data.alert_id})`;
+      success = `Alert created (ID: ${data.data?.alert_id})`;
     } catch (e: unknown) {
       error = e instanceof Error ? e.message : "Unknown error";
     } finally {

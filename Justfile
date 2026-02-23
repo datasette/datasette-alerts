@@ -38,7 +38,7 @@ dev *flags:
     --restart \
     --clear \
   -- uv run \
-    --with-editable '."[test]"' \
+    --with-editable . \
     --with datasette-visible-internal-db \
     --with datasette-write-ui \
     --with notify-py \

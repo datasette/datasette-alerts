@@ -33,8 +33,8 @@ CI = "https://github.com/datasette/datasette-alerts/actions"
 [project.entry-points.datasette]
 alerts = "datasette_alerts"
 
-[project.optional-dependencies]
-test = ["pytest", "pytest-asyncio"]
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

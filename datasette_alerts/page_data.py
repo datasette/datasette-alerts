@@ -13,4 +13,14 @@ class NewAlertPageData(BaseModel):
     notifiers: list[NotifierInfo] = []
 
 
+class NewAlertResponseData(BaseModel):
+    alert_id: str
+
+
+class NewAlertResponse(BaseModel):
+    ok: bool
+    data: NewAlertResponseData | None = None
+    error: str | None = None
+
+
 __exports__ = [NewAlertPageData]

@@ -5,7 +5,7 @@ from datasette import Response
 from datasette_plugin_router import Body
 
 from .internal_db import InternalDB, NewAlertRouteParameters
-from .page_data import NewAlertPageData, NotifierInfo
+from .page_data import NewAlertPageData, NewAlertResponse, NotifierInfo
 from .router import router, check_permission
 from .bg_task import get_notifiers
 
@@ -49,7 +49,7 @@ async def ui_new_alert(datasette, request):
     )
 
 
-@router.POST("/-/datasette-alerts/api/new-alert$")
+@router.POST("/-/datasette-alerts/api/new-alert$", output=NewAlertResponse)
 @check_permission()
 async def api_new_alert(
     datasette, request, body: Annotated[NewAlertRouteParameters, Body()]
