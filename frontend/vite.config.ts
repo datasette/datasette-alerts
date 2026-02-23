@@ -60,6 +60,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         new_alert: "src/pages/new_alert/index.ts",
+        alerts_list: "src/pages/alerts_list/index.ts",
       },
     },
   },

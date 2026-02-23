@@ -151,6 +151,52 @@ class InternalDB:
 
         return await self.db.execute_write_fn(write) # type: ignore
 
+    async def list_alerts_for_database(self, database_name: str) -> list[dict]:
+        """Lists all alerts for the given database, including notifier slugs."""
+
+        def read(conn):
+            rows = conn.execute(
+                """
+                  SELECT
+                    a.id,
+                    a.database_name,
+                    a.table_name,
+                    a.frequency,
+                    a.next_deadline,
+                    a.alert_created_at,
+                    cast((julianday(a.next_deadline) - julianday('now')) * 86400 as integer) as seconds_until_next,
+                    group_concat(DISTINCT s.notifier) as notifiers,
+                    (
+                      SELECT max(l.logged_at)
+                      FROM datasette_alerts_alert_logs l
+                      WHERE l.alert_id = a.id
+                        AND json_array_length(l.new_ids) > 0
+                    ) as last_notification_at
+                  FROM datasette_alerts_alerts a
+                  LEFT JOIN datasette_alerts_subscriptions s ON s.alert_id = a.id
+                  WHERE a.database_name = ?
+                  GROUP BY a.id
+                  ORDER BY a.alert_created_at DESC
+                """,
+                [database_name],
+            ).fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "database_name": row[1],
+                    "table_name": row[2],
+                    "frequency": row[3],
+                    "next_deadline": row[4],
+                    "alert_created_at": row[5],
+                    "seconds_until_next": row[6],
+                    "notifiers": row[7] or "",
+                    "last_notification_at": row[8],
+                }
+                for row in rows
+            ]
+
+        return await self.db.execute_write_fn(read)  # type: ignore
+
     async def new_alert(self, params: NewAlertRouteParameters, cursor: str) -> str:
         """Creates a new alert with the given parameters and returns the alert ID."""
 

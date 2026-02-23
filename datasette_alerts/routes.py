@@ -5,7 +5,7 @@ from datasette import Response
 from datasette_plugin_router import Body
 
 from .internal_db import InternalDB, NewAlertRouteParameters
-from .page_data import NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
+from .page_data import AlertInfo, AlertsListPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
 from .router import router, check_permission
 from .bg_task import get_notifiers
 
@@ -43,6 +43,26 @@ def extract_config_fields(form_class) -> list[NotifierConfigField]:
             )
         )
     return fields
+
+
+@router.GET(r"/-/(?P<db_name>[^/]+)/datasette-alerts$")
+@check_permission()
+async def ui_alerts_list(datasette, request, db_name: str):
+    db = datasette.databases.get(db_name)
+    if db is None:
+        return Response.html("Database not found", status=404)
+
+    internal_db = InternalDB(datasette.get_internal_database())
+    rows = await internal_db.list_alerts_for_database(db_name)
+    alerts = [AlertInfo(**row) for row in rows]
+
+    return await render_page(
+        datasette,
+        request,
+        page_title=f"Alerts — {db_name}",
+        entrypoint="src/pages/alerts_list/index.ts",
+        page_data=AlertsListPageData(database_name=db_name, alerts=alerts),
+    )
 
 
 @router.GET("/-/datasette-alerts/new-alert$")

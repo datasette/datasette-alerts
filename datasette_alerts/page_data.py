@@ -33,4 +33,22 @@ class NewAlertResponse(BaseModel):
     error: str | None = None
 
 
-__exports__ = [NewAlertPageData]
+class AlertInfo(BaseModel):
+    id: str
+    database_name: str
+    table_name: str
+    frequency: str
+    next_deadline: str | None = None
+    seconds_until_next: int | None = None
+    alert_created_at: str | None = None
+    notifiers: str = ""
+    last_notification_at: str | None = None
+
+
+# /-/{db_name}/datasette-alerts — list of alerts for a database
+class AlertsListPageData(BaseModel):
+    database_name: str
+    alerts: list[AlertInfo] = []
+
+
+__exports__ = [NewAlertPageData, AlertsListPageData]

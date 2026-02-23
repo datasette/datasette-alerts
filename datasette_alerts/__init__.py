@@ -96,6 +96,26 @@ def table_actions(datasette, actor, database, table, request):
     return check
 
 @hookimpl
+def database_actions(datasette, actor, database, request):
+    async def check():
+        allowed = await datasette.allowed(
+            action=ALERTS_ACCESS_NAME, actor=actor
+        )
+        if allowed:
+            return [
+                {
+                    "href": datasette.urls.path(
+                        f"/-/{database}/datasette-alerts"
+                    ),
+                    "label": "Alerts",
+                    "description": "View and manage alerts for this database",
+                }
+            ]
+
+    return check
+
+
+@hookimpl
 def register_actions(datasette):
     return [
         Action(
