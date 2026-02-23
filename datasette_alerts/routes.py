@@ -5,7 +5,7 @@ from datasette import Response
 from datasette_plugin_router import Body
 
 from .internal_db import InternalDB, NewAlertRouteParameters
-from .page_data import NewAlertPageData, NewAlertResponse, NotifierInfo
+from .page_data import NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
 from .router import router, check_permission
 from .bg_task import get_notifiers
 
@@ -26,26 +26,52 @@ async def render_page(
     )
 
 
+def extract_config_fields(form_class) -> list[NotifierConfigField]:
+    """Extract field metadata from a WTForms Form class."""
+    form = form_class()
+    fields = []
+    for field in form:
+        render_kw = field.render_kw or {}
+        fields.append(
+            NotifierConfigField(
+                name=field.name,
+                label=str(field.label.text) if field.label else field.name,
+                field_type="text",
+                placeholder=render_kw.get("placeholder", ""),
+                description=field.description or "",
+                default=str(field.default) if field.default else "",
+            )
+        )
+    return fields
+
+
 @router.GET("/-/datasette-alerts/new-alert$")
 @check_permission()
 async def ui_new_alert(datasette, request):
     notifiers = await get_notifiers(datasette)
+    notifier_infos = []
+    for n in notifiers:
+        config_fields = []
+        try:
+            form_class = await n.get_config_form()
+            config_fields = extract_config_fields(form_class)
+        except NotImplementedError:
+            pass
+        notifier_infos.append(
+            NotifierInfo(
+                slug=n.slug,
+                name=n.name,
+                icon=n.icon,
+                description=n.description,
+                config_fields=config_fields,
+            )
+        )
     return await render_page(
         datasette,
         request,
         page_title="Create Alert",
         entrypoint="src/pages/new_alert/index.ts",
-        page_data=NewAlertPageData(
-            notifiers=[
-                NotifierInfo(
-                    slug=n.slug,
-                    name=n.name,
-                    icon=n.icon,
-                    description=n.description,
-                )
-                for n in notifiers
-            ],
-        ),
+        page_data=NewAlertPageData(notifiers=notifier_infos),
     )
 
 

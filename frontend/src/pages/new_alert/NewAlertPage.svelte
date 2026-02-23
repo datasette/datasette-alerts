@@ -17,7 +17,9 @@
   let timestampColumn = $state("");
   let frequency = $state("");
   let selectedNotifier = $state(notifiers[0]?.slug ?? "");
-  let notifierMeta: Record<string, string> = $state({});
+  let notifierMeta: Record<string, string> = $state(
+    initMetaDefaults(notifiers[0]),
+  );
   let submitting = $state(false);
   let error: string | null = $state(null);
   let success: string | null = $state(null);
@@ -64,15 +66,20 @@
     prefillColumns();
   }
 
-  function handleConfigInput(e: Event) {
-    const textarea = e.currentTarget as HTMLTextAreaElement;
-    try {
-      notifierMeta = JSON.parse(textarea.value);
-      error = null;
-    } catch {
-      // allow typing incomplete JSON
+  function initMetaDefaults(
+    notifier: (typeof notifiers)[number] | undefined,
+  ): Record<string, string> {
+    if (!notifier) return {};
+    const defaults: Record<string, string> = {};
+    for (const field of notifier.config_fields ?? []) {
+      if (field.default) defaults[field.name] = field.default;
     }
+    return defaults;
   }
+
+  const selectedNotifierInfo = $derived(
+    notifiers.find((n) => n.slug === selectedNotifier),
+  );
 
   async function handleSubmit(e: Event) {
     e.preventDefault();
@@ -170,7 +177,7 @@
                   checked={selectedNotifier === notifier.slug}
                   onchange={() => {
                     selectedNotifier = notifier.slug;
-                    notifierMeta = {};
+                    notifierMeta = initMetaDefaults(notifier);
                   }}
                 />
                 {notifier.name}
@@ -183,20 +190,28 @@
         </ul>
       </fieldset>
 
-      <div class="notifier-config">
-        <p class="notifier-config-hint">
-          Configure notifier-specific fields below. Enter key=value pairs for the selected notifier.
-        </p>
-        <div class="form-field">
-          <label for="_notifier_config">Configuration (JSON)</label>
-          <textarea
-            id="_notifier_config"
-            placeholder={`{"webhook_url": "https://..."}`}
-            rows={3}
-            oninput={handleConfigInput}
-          ></textarea>
+      {#if selectedNotifierInfo?.config_fields?.length}
+        <div class="notifier-config">
+          {#each selectedNotifierInfo.config_fields as field (field.name)}
+            <div class="form-field">
+              <label for="notifier-{field.name}">{field.label}</label>
+              <input
+                type="text"
+                id="notifier-{field.name}"
+                placeholder={field.placeholder}
+                value={notifierMeta[field.name] ?? ""}
+                oninput={(e) => {
+                  const input = e.currentTarget as HTMLInputElement;
+                  notifierMeta = { ...notifierMeta, [field.name]: input.value };
+                }}
+              />
+              {#if field.description}
+                <p class="field-description">{field.description}</p>
+              {/if}
+            </div>
+          {/each}
         </div>
-      </div>
+      {/if}
     {/if}
 
     <div class="form-actions">
@@ -233,8 +248,7 @@
   .form-field label {
     font-weight: 600;
   }
-  .form-field input,
-  .form-field textarea {
+  .form-field input {
     padding: 0.4rem 0.5rem;
     border: 1px solid #ccc;
     border-radius: 4px;
@@ -264,12 +278,14 @@
     align-items: center;
   }
   .notifier-config {
-    padding: 0.5rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
   }
-  .notifier-config-hint {
-    font-size: 0.85rem;
+  .field-description {
+    font-size: 0.8rem;
     color: #666;
-    margin: 0 0 0.5rem;
+    margin: 0;
   }
   .form-actions {
     padding-top: 0.5rem;
