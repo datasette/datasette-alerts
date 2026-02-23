@@ -10,12 +10,17 @@
 
   const pageData = loadPageData<NewAlertPageData>();
   const notifiers = pageData.notifiers ?? [];
+  const database = pageData.database_name;
+
+  interface ColumnInfo {
+    name: string;
+    pk: number;
+  }
 
   let name = $state("");
-  let database = $state("");
   let slug = $state("");
-  let idColumn = $state("");
   let tableName = $state("");
+  let idColumns: string[] = $state([]);
   let timestampColumn = $state("");
   let frequency = $state("");
   let selectedNotifier = $state(notifiers[0]?.slug ?? "");
@@ -24,46 +29,70 @@
   let error: string | null = $state(null);
   let success: string | null = $state(null);
 
+  let tables: string[] = $state([]);
+  let columns: ColumnInfo[] = $state([]);
+
+  function queryUrl(sql: string, params?: Record<string, string>): string {
+    const qs = new URLSearchParams({ sql, _shape: "array", ...params });
+    return `/${database}/-/query.json?${qs}`;
+  }
+
+  async function fetchTables() {
+    try {
+      const resp = await fetch(
+        queryUrl(
+          "select name from pragma_table_list where schema='main' and type='table' order by name",
+        ),
+      );
+      const rows: Array<{ name: string }> = await resp.json();
+      tables = rows.map((r) => r.name);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function fetchColumns(table: string) {
+    if (!table) {
+      columns = [];
+      return;
+    }
+    try {
+      const resp = await fetch(
+        queryUrl("select * from pragma_table_xinfo(:table)", { table }),
+      );
+      columns = await resp.json();
+
+      // Pre-select pk columns for ID
+      idColumns = columns.filter((c) => c.pk).map((c) => c.name);
+
+      // Pre-select timestamp column
+      const tsCol = columns.find(
+        (c) =>
+          c.name.endsWith("_at") ||
+          c.name.endsWith("_date") ||
+          c.name.endsWith("timestamp") ||
+          c.name.endsWith("time"),
+      );
+      timestampColumn = tsCol ? tsCol.name : "";
+    } catch {
+      columns = [];
+    }
+  }
+
   // Auto-fill from URL params
   const params = new URLSearchParams(window.location.search);
-  if (params.has("db_name")) {
-    database = params.get("db_name")!;
-  }
   if (params.has("table_name")) {
     tableName = params.get("table_name")!;
   }
 
-  async function prefillColumns() {
-    if (!database || !tableName) return;
-    try {
-      const sql = "select * from pragma_table_xinfo(:table)";
-      const resp = await fetch(
-        `/${database}/-/query.json?sql=${encodeURIComponent(sql)}&table=${encodeURIComponent(tableName)}&_shape=array`,
-      );
-      const columns: Array<{ name: string; pk: number }> = await resp.json();
-      idColumn = columns
-        .filter((c) => c.pk)
-        .map((c) => c.name)
-        .join(",");
-      const tsCol = columns.find(
-        (d) =>
-          d.name.endsWith("_at") ||
-          d.name.endsWith("_date") ||
-          d.name.endsWith("timestamp") ||
-          d.name.endsWith("time"),
-      );
-      if (tsCol) {
-        timestampColumn = tsCol.name;
-      } else if (columns.length === 1) {
-        timestampColumn = columns[0]!.name;
-      }
-    } catch {
-      // ignore prefill errors
-    }
+  fetchTables();
+  if (tableName) {
+    fetchColumns(tableName);
   }
 
-  if (params.has("db_name") && params.has("table_name")) {
-    prefillColumns();
+  function onTableChange(newTable: string) {
+    tableName = newTable;
+    fetchColumns(newTable);
   }
 
   async function handleSubmit(e: Event) {
@@ -76,7 +105,7 @@
       const body = {
         database_name: database,
         table_name: tableName,
-        id_columns: idColumn.split(",").map((s) => s.trim()),
+        id_columns: idColumns,
         timestamp_column: timestampColumn,
         frequency,
         subscriptions: [
@@ -88,7 +117,7 @@
       };
 
       const { data, error: apiError } = await client.POST(
-        "/-/datasette-alerts/api/new-alert",
+        `/-/${encodeURIComponent(database)}/datasette-alerts/api/new` as any,
         { body },
       );
       if (apiError) {
@@ -109,12 +138,14 @@
   <form onsubmit={handleSubmit}>
     <AlertDetailsFields
       bind:name
-      bind:database
       bind:slug
-      bind:idColumn
-      bind:tableName
+      {tableName}
+      {tables}
+      {columns}
+      bind:idColumns
       bind:timestampColumn
       bind:frequency
+      onTableChange={onTableChange}
     />
 
     {#if notifiers.length > 0}

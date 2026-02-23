@@ -65,9 +65,13 @@ async def ui_alerts_list(datasette, request, db_name: str):
     )
 
 
-@router.GET("/-/datasette-alerts/new-alert$")
+@router.GET(r"/-/(?P<db_name>[^/]+)/datasette-alerts/new$")
 @check_permission()
-async def ui_new_alert(datasette, request):
+async def ui_new_alert(datasette, request, db_name: str):
+    db = datasette.databases.get(db_name)
+    if db is None:
+        return Response.html("Database not found", status=404)
+
     notifiers = await get_notifiers(datasette)
     notifier_infos = []
     for n in notifiers:
@@ -91,22 +95,23 @@ async def ui_new_alert(datasette, request):
         request,
         page_title="Create Alert",
         entrypoint="src/pages/new_alert/index.ts",
-        page_data=NewAlertPageData(notifiers=notifier_infos),
+        page_data=NewAlertPageData(database_name=db_name, notifiers=notifier_infos),
     )
 
 
-@router.POST("/-/datasette-alerts/api/new-alert$", output=NewAlertResponse)
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/new$", output=NewAlertResponse)
 @check_permission()
 async def api_new_alert(
-    datasette, request, body: Annotated[NewAlertRouteParameters, Body()]
+    datasette, request, db_name: str, body: Annotated[NewAlertRouteParameters, Body()]
 ):
-    db = datasette.databases.get(body.database_name)
+    db = datasette.databases.get(db_name)
     if db is None:
         return Response.json(
-            {"ok": False, "error": f"Database {body.database_name} not found"},
+            {"ok": False, "error": f"Database {db_name} not found"},
             status=404,
         )
 
+    body.database_name = db_name
     internal_db = InternalDB(datasette.get_internal_database())
 
     result = await db.execute(

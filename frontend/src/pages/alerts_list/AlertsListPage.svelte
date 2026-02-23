@@ -21,7 +21,7 @@
     <h2>Alerts</h2>
     <a
       class="new-alert-link"
-      href={`/-/datasette-alerts/new-alert?db_name=${encodeURIComponent(dbName)}`}
+      href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/new`}
       >New alert</a
     >
   </div>

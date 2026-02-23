@@ -18,8 +18,9 @@ class NotifierInfo(BaseModel):
     config_fields: list[NotifierConfigField] = []
 
 
-# /-/datasette-alerts/new-alert — form to create a new alert
+# /-/{db_name}/datasette-alerts/new — form to create a new alert
 class NewAlertPageData(BaseModel):
+    database_name: str
     notifiers: list[NotifierInfo] = []
 
 

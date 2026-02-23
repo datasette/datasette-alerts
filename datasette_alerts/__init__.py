@@ -86,7 +86,7 @@ def table_actions(datasette, actor, database, table, request):
             return [
                 {
                     "href": datasette.urls.path(
-                        f"/-/datasette-alerts/new-alert?db_name={database}&table_name={table}"
+                        f"/-/{database}/datasette-alerts/new?table_name={table}"
                     ),
                     "label": "Configure new alert",
                     "description": "Receive notifications when new records are added or changed to this table",
