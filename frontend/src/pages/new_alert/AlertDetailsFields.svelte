@@ -5,8 +5,6 @@
   }
 
   interface Props {
-    name: string;
-    slug: string;
     tableName: string;
     tables: string[];
     columns: ColumnInfo[];
@@ -17,8 +15,6 @@
   }
 
   let {
-    name = $bindable(),
-    slug = $bindable(),
     tableName,
     tables,
     columns,
@@ -27,6 +23,14 @@
     frequency = $bindable(),
     onTableChange,
   }: Props = $props();
+
+  let freqAmount = $state(30);
+  let freqUnit = $state("seconds");
+
+  function syncFrequency() {
+    frequency = `+${freqAmount} ${freqUnit}`;
+  }
+  syncFrequency();
 
   function toggleIdColumn(colName: string) {
     if (idColumns.includes(colName)) {
@@ -37,14 +41,6 @@
   }
 </script>
 
-<div class="form-field">
-  <label for="_name">Name</label>
-  <input type="text" id="_name" bind:value={name} placeholder="Alert Name" required />
-</div>
-<div class="form-field">
-  <label for="_slug">Slug</label>
-  <input type="text" id="_slug" bind:value={slug} placeholder="Slug" required />
-</div>
 <div class="form-field">
   <label for="_table_name">Table</label>
   <select
@@ -86,8 +82,22 @@
   </div>
 {/if}
 <div class="form-field">
-  <label for="_frequency">Frequency</label>
-  <input type="text" id="_frequency" bind:value={frequency} placeholder="+1 hour" required />
+  <label for="_freq_amount">Frequency</label>
+  <div class="freq-row">
+    <input
+      type="number"
+      id="_freq_amount"
+      bind:value={freqAmount}
+      min="1"
+      oninput={() => syncFrequency()}
+      required
+    />
+    <select bind:value={freqUnit} onchange={() => syncFrequency()}>
+      <option value="seconds">seconds</option>
+      <option value="minutes">minutes</option>
+      <option value="hours">hours</option>
+    </select>
+  </div>
 </div>
 
 <style>
@@ -119,5 +129,15 @@
   }
   .checkbox-label input[type="checkbox"] {
     padding: 0;
+  }
+  .freq-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .freq-row input[type="number"] {
+    width: 5rem;
+  }
+  .freq-row select {
+    flex: 1;
   }
 </style>

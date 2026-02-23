@@ -52,4 +52,30 @@ class AlertsListPageData(BaseModel):
     alerts: list[AlertInfo] = []
 
 
-__exports__ = [NewAlertPageData, AlertsListPageData]
+class AlertSubscriptionInfo(BaseModel):
+    notifier: str
+    meta: dict = {}
+
+
+class AlertLogEntry(BaseModel):
+    logged_at: str | None = None
+    new_ids: list = []
+    cursor: str | None = None
+
+
+# /-/{db_name}/datasette-alerts/alerts/{alert_id}
+class AlertDetailPageData(BaseModel):
+    id: str
+    database_name: str
+    table_name: str
+    id_columns: list[str] = []
+    timestamp_column: str = ""
+    frequency: str = ""
+    next_deadline: str | None = None
+    seconds_until_next: int | None = None
+    alert_created_at: str | None = None
+    subscriptions: list[AlertSubscriptionInfo] = []
+    logs: list[AlertLogEntry] = []
+
+
+__exports__ = [NewAlertPageData, AlertsListPageData, AlertDetailPageData]

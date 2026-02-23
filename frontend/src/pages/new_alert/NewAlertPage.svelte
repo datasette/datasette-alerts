@@ -17,8 +17,6 @@
     pk: number;
   }
 
-  let name = $state("");
-  let slug = $state("");
   let tableName = $state("");
   let idColumns: string[] = $state([]);
   let timestampColumn = $state("");
@@ -41,7 +39,7 @@
     try {
       const resp = await fetch(
         queryUrl(
-          "select name from pragma_table_list where schema='main' and type='table' order by name",
+          "select name from pragma_table_list where schema='main' and type='table' and name not like 'sqlite_%' order by name",
         ),
       );
       const rows: Array<{ name: string }> = await resp.json();
@@ -137,8 +135,6 @@
   <h2>Create Alert</h2>
   <form onsubmit={handleSubmit}>
     <AlertDetailsFields
-      bind:name
-      bind:slug
       {tableName}
       {tables}
       {columns}

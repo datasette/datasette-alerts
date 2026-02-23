@@ -5,7 +5,7 @@ from datasette import Response
 from datasette_plugin_router import Body
 
 from .internal_db import InternalDB, NewAlertRouteParameters
-from .page_data import AlertInfo, AlertsListPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
+from .page_data import AlertDetailPageData, AlertInfo, AlertsListPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
 from .router import router, check_permission
 from .bg_task import get_notifiers
 
@@ -62,6 +62,27 @@ async def ui_alerts_list(datasette, request, db_name: str):
         page_title=f"Alerts — {db_name}",
         entrypoint="src/pages/alerts_list/index.ts",
         page_data=AlertsListPageData(database_name=db_name, alerts=alerts),
+    )
+
+
+@router.GET(r"/-/(?P<db_name>[^/]+)/datasette-alerts/alerts/(?P<alert_id>[^/]+)$")
+@check_permission()
+async def ui_alert_detail(datasette, request, db_name: str, alert_id: str):
+    db = datasette.databases.get(db_name)
+    if db is None:
+        return Response.html("Database not found", status=404)
+
+    internal_db = InternalDB(datasette.get_internal_database())
+    detail = await internal_db.get_alert_detail(alert_id)
+    if detail is None:
+        return Response.html("Alert not found", status=404)
+
+    return await render_page(
+        datasette,
+        request,
+        page_title=f"Alert — {detail['table_name']}",
+        entrypoint="src/pages/alert_detail/index.ts",
+        page_data=AlertDetailPageData(**detail),
     )
 
 

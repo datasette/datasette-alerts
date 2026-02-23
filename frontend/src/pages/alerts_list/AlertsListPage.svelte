@@ -43,7 +43,7 @@
       <tbody>
         {#each alerts as alert}
           <tr>
-            <td><code>{alert.id}</code></td>
+            <td><a href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/alerts/${alert.id}`}><code>{alert.id}</code></a></td>
             <td><code>{alert.table_name}</code></td>
             <td>{alert.notifiers}</td>
             <td>{alert.frequency}</td>

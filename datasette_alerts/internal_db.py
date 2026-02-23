@@ -197,6 +197,71 @@ class InternalDB:
 
         return await self.db.execute_write_fn(read)  # type: ignore
 
+    async def get_alert_detail(self, alert_id: str) -> dict | None:
+        """Fetches full alert details including subscriptions and recent logs."""
+
+        def read(conn):
+            row = conn.execute(
+                """
+                  SELECT
+                    a.id,
+                    a.database_name,
+                    a.table_name,
+                    a.id_columns,
+                    a.timestamp_column,
+                    a.frequency,
+                    a.next_deadline,
+                    a.alert_created_at,
+                    cast((julianday(a.next_deadline) - julianday('now')) * 86400 as integer) as seconds_until_next
+                  FROM datasette_alerts_alerts a
+                  WHERE a.id = ?
+                """,
+                [alert_id],
+            ).fetchone()
+            if row is None:
+                return None
+
+            subs = conn.execute(
+                "SELECT notifier, meta FROM datasette_alerts_subscriptions WHERE alert_id = ?",
+                [alert_id],
+            ).fetchall()
+
+            logs = conn.execute(
+                """
+                  SELECT logged_at, new_ids, cursor
+                  FROM datasette_alerts_alert_logs
+                  WHERE alert_id = ?
+                  ORDER BY logged_at DESC
+                  LIMIT 20
+                """,
+                [alert_id],
+            ).fetchall()
+
+            return {
+                "id": row[0],
+                "database_name": row[1],
+                "table_name": row[2],
+                "id_columns": json.loads(row[3]),
+                "timestamp_column": row[4],
+                "frequency": row[5],
+                "next_deadline": row[6],
+                "alert_created_at": row[7],
+                "seconds_until_next": row[8],
+                "subscriptions": [
+                    {"notifier": s[0], "meta": json.loads(s[1])} for s in subs
+                ],
+                "logs": [
+                    {
+                        "logged_at": l[0],
+                        "new_ids": json.loads(l[1]),
+                        "cursor": l[2],
+                    }
+                    for l in logs
+                ],
+            }
+
+        return await self.db.execute_write_fn(read)  # type: ignore
+
     async def new_alert(self, params: NewAlertRouteParameters, cursor: str) -> str:
         """Creates a new alert with the given parameters and returns the alert ID."""
 
