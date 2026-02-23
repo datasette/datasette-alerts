@@ -35,23 +35,38 @@ frontend/                  # Vite + Svelte 5 + TypeScript
 
 ## Adding a New Page
 
-1. **Python**: Add Pydantic model in `page_data.py`
-2. **Python**: Add route in `routes.py` using `@router.GET(pattern)` + `@check_permission()` + `render_page()`
-3. **Frontend**: Create `frontend/src/pages/<name>/index.ts` (mounts Svelte component to `#app-root`)
-4. **Frontend**: Create `frontend/src/pages/<name>/Page.svelte`
-5. **Frontend**: Create `frontend/src/page_data/<Name>_schema.json` (types auto-generated on build)
-6. **Vite**: Add entry to `rollupOptions.input` in `vite.config.ts`
-7. **Build**: `npm run build` from `frontend/`
+1. Add Pydantic model in `page_data.py`
+2. Add DB query method to `InternalDB` in `internal_db.py` if needed
+3. Add route in `routes.py` using `@router.GET(pattern)` + `@check_permission()` + `render_page()`
+4. Create `frontend/src/pages/<name>/index.ts` (mounts Svelte component to `#app-root`)
+5. Create `frontend/src/pages/<name>/<Name>Page.svelte`
+6. Create `frontend/src/page_data/<Name>PageData_schema.json` (types auto-generated on build)
+7. Add entry to `rollupOptions.input` in `frontend/vite.config.ts`
+8. `just frontend` to build
+
+Note: schema JSON files and generated .types.ts files are gitignored.
 
 ## Page Data Flow
 
 Server → `page_data.model_dump()` → JSON in `<script id="pageData">` → `loadPageData<T>()` in Svelte
 
-## Route Patterns
+## Routes
 
-- Regex patterns with `$` anchor: `"/-/datasette-alerts/new-alert$"`
-- Named groups for path params: `r"/-/(?P<db_name>[^/]+)/datasette-alerts$"`
-- Named groups are passed as kwargs through `check_permission()` decorator
+All routes are scoped under `/-/{db_name}/datasette-alerts/`:
+
+- `GET /-/{db}/datasette-alerts` — alerts list page
+- `GET /-/{db}/datasette-alerts/new` — new alert form
+- `GET /-/{db}/datasette-alerts/alerts/{alert_id}` — alert detail page
+- `POST /-/{db}/datasette-alerts/api/new` — create alert API
+
+Regex patterns with `$` anchor and named groups for path params:
+`r"/-/(?P<db_name>[^/]+)/datasette-alerts$"`
+Named groups are passed as kwargs through `check_permission()` decorator.
+
+## Datasette JSON API (used by frontend)
+
+- Table list: `/{db}/-/query.json?sql=select name from pragma_table_list where schema='main' and type='table' and name not like 'sqlite_%'&_shape=array`
+- Column info: `/{db}/-/query.json?sql=select * from pragma_table_xinfo(:table)&table={table}&_shape=array`
 
 ## DB Access
 
