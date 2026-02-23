@@ -10,7 +10,9 @@ classifiers=[
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "datasette>=1.0a21",
+    "datasette>=1.0a19",
+    "datasette-plugin-router>=0.0.1a2",
+    "datasette-vite>=0.0.1a1",
     "pydantic>=2",
     "python-ulid>=3",
     "sqlite-migrate>=0.1b0",
@@ -39,11 +41,9 @@ asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.setuptools.package-data]
-datasette_alerts = ["static/*", "templates/*"]
+datasette_alerts = ["static/**/*", "templates/*", "manifest.json"]
 
-
-# find exclude node_modules
 [tool.setuptools.packages.find]
 exclude = [
-    "node_modules",
+    "frontend",
 ]

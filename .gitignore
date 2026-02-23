@@ -17,3 +17,12 @@ build
 .env
 
 node_modules
+
+# Vite build output
+datasette_alerts/manifest.json
+datasette_alerts/static/gen/
+
+# Generated types
+frontend/api.d.ts
+frontend/src/page_data/*_schema.json
+frontend/src/page_data/*.types.ts

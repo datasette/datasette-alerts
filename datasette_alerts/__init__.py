@@ -1,15 +1,23 @@
+from datasette.permissions import Action
 from datasette import hookimpl
 from .internal_migrations import internal_migrations
 from sqlite_utils import Database
 from functools import wraps
 import asyncio
+import os
 
 from . import hookspecs
 
 from datasette.plugins import pm
+from datasette_vite import vite_entry
 
 from .bg_task import bg_task, Notifier
+
+# Import route module to trigger route registration on the shared router
 from . import routes
+from .router import router, ALERTS_ACCESS_NAME
+
+_ = (routes,)
 
 __all___ = [
     Notifier,
@@ -17,7 +25,6 @@ __all___ = [
 
 pm.add_hookspecs(hookspecs)
 
-PERMISSION_ACCESS_NAME = "datasette-alerts-access"
 
 @hookimpl
 def register_actions():
@@ -52,29 +59,47 @@ def asgi_wrapper(datasette):
 
     return wrap_with_alerts
 
+
 @hookimpl
 def register_routes():
-    return [
-        # TODO permission gate these routes
-        (r"^/-/datasette-alerts/new-alert$", routes.ui_new_alert),
-        (r"^/-/datasette-alerts/api/new-alert$", routes.api_new_alert),
-    ]
+    return router.routes()
+
+
+@hookimpl
+def extra_template_vars(datasette):
+    entry = vite_entry(
+        datasette=datasette,
+        plugin_package="datasette_alerts",
+        vite_dev_path=os.environ.get("DATASETTE_ALERTS_VITE_PATH"),
+    )
+    return {"datasette_alerts_vite_entry": entry}
+
 
 
 @hookimpl
 def table_actions(datasette, actor, database, table, request):
     async def check():
-      allowed = await datasette.permission_allowed(
-          request.actor, PERMISSION_ACCESS_NAME, default=False
-      )
-      if allowed:
-          return [  
-              {
-                  "href": datasette.urls.path(
-                      f"/-/datasette-alerts/new-alert?db_name={database}&table_name={table}"
-                  ),
-                  "label": "Configure new alert",
-                  "description": "Receive notifications when new records are added or changed to this table",
-              }
-          ]
+        allowed = await datasette.allowed(
+            action=ALERTS_ACCESS_NAME, actor=actor
+        )
+        if allowed:
+            return [
+                {
+                    "href": datasette.urls.path(
+                        f"/-/datasette-alerts/new-alert?db_name={database}&table_name={table}"
+                    ),
+                    "label": "Configure new alert",
+                    "description": "Receive notifications when new records are added or changed to this table",
+                }
+            ]
+
     return check
+
+@hookimpl
+def register_actions(datasette):
+    return [
+        Action(
+            name=ALERTS_ACCESS_NAME,
+            description="Can access datasette alerts ",
+        )
+    ]
