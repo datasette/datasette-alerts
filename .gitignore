@@ -26,3 +26,4 @@ datasette_alerts/static/gen/
 frontend/api.d.ts
 frontend/src/page_data/*_schema.json
 frontend/src/page_data/*.types.ts
+uv.lock

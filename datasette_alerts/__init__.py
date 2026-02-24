@@ -13,6 +13,8 @@ from datasette.plugins import pm
 from datasette_vite import vite_entry
 
 from .bg_task import bg_task, Notifier
+from .internal_db import InternalDB, NewAlertRouteParameters, NewSubscription
+_ = (InternalDB, NewAlertRouteParameters, NewSubscription)
 
 # Import route module to trigger route registration on the shared router
 from . import routes
@@ -25,17 +27,6 @@ __all___ = [
 ]
 
 pm.add_hookspecs(hookspecs)
-
-
-@hookimpl
-def register_actions():
-    return [
-        Action(
-            name=PERMISSION_ACCESS_NAME,
-            description="Access datasette-alerts functionality",
-        )
-    ]
-
 
 @hookimpl
 async def startup(datasette):

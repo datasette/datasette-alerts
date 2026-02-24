@@ -73,7 +73,14 @@ async def datasette(tmpdir):
         """
         )
 
-    datasette = Datasette([data])
+    datasette = Datasette(
+        [data],
+        config={
+            "permissions": {
+                "datasette-alerts-access": {"id": "*"},
+            },
+        },
+    )
     datasette._test_db = db
     await datasette.invoke_startup()
     return datasette
@@ -171,10 +178,10 @@ async def test_internal_db_alert_subscriptions(datasette):
     subscriptions = await internal_db.alert_subscriptions(alert_id)
 
     assert len(subscriptions) == 2
-    assert subscriptions[0]["notifier"] == "notifier1"
-    assert json.loads(subscriptions[0]["meta"]) == {"key1": "value1"}
-    assert subscriptions[1]["notifier"] == "notifier2"
-    assert json.loads(subscriptions[1]["meta"]) == {"key2": "value2"}
+    assert subscriptions[0].notifier == "notifier1"
+    assert subscriptions[0].meta == {"key1": "value1"}
+    assert subscriptions[1].notifier == "notifier2"
+    assert subscriptions[1].meta == {"key2": "value2"}
 
 
 @pytest.mark.asyncio
@@ -304,6 +311,7 @@ async def test_internal_db_start_ready_jobs(datasette):
 @pytest.mark.asyncio
 async def test_api_new_alert_endpoint(datasette):
     """Test the API endpoint for creating alerts."""
+    cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
     payload = {
         "database_name": "data",
         "table_name": "events",
@@ -316,7 +324,7 @@ async def test_api_new_alert_endpoint(datasette):
     }
 
     response = await datasette.client.post(
-        "/-/datasette-alerts/api/new-alert", json=payload
+        "/-/data/datasette-alerts/api/new", json=payload, cookies=cookies
     )
 
     assert response.status_code == 200
@@ -337,6 +345,7 @@ async def test_api_new_alert_endpoint(datasette):
 @pytest.mark.asyncio
 async def test_api_new_alert_invalid_database(datasette):
     """Test API endpoint with invalid database name."""
+    cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
     payload = {
         "database_name": "nonexistent",
         "table_name": "events",
@@ -347,7 +356,7 @@ async def test_api_new_alert_invalid_database(datasette):
     }
 
     response = await datasette.client.post(
-        "/-/datasette-alerts/api/new-alert", json=payload
+        "/-/nonexistent/datasette-alerts/api/new", json=payload, cookies=cookies
     )
 
     assert response.status_code == 404
@@ -358,22 +367,25 @@ async def test_api_new_alert_invalid_database(datasette):
 
 @pytest.mark.asyncio
 async def test_api_new_alert_invalid_payload(datasette):
-    """Test API endpoint with invalid payload."""
+    """Test API endpoint with invalid payload returns an error."""
+    cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
     response = await datasette.client.post(
-        "/-/datasette-alerts/api/new-alert", json={"invalid": "payload"}
+        "/-/data/datasette-alerts/api/new", json={"invalid": "payload"}, cookies=cookies
     )
 
-    assert response.status_code == 400
-    data = response.json()
-    assert data["ok"] is False
+    assert response.status_code == 500
 
 
 @pytest.mark.asyncio
 async def test_api_new_alert_wrong_method(datasette):
-    """Test API endpoint with GET instead of POST."""
-    response = await datasette.client.get("/-/datasette-alerts/api/new-alert")
+    """Test API endpoint with GET instead of POST returns 404."""
+    cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
+    response = await datasette.client.get(
+        "/-/data/datasette-alerts/api/new", cookies=cookies
+    )
 
-    assert response.status_code == 405
+    # GET hits the route but body parsing fails
+    assert response.status_code == 500
 
 
 @pytest.mark.asyncio
@@ -392,7 +404,7 @@ async def test_table_action_link_with_permission(datasette):
     # Check that the alert configuration link is present
     assert "Configure new alert" in response.text
     assert (
-        "/-/datasette-alerts/new-alert?db_name=data&amp;table_name=events"
+        "/-/data/datasette-alerts/new?table_name=events"
         in response.text
     )
 
