@@ -12,7 +12,8 @@ from .trigger_db import create_queue_and_trigger
 
 
 async def render_page(
-    datasette, request, *, page_title: str, entrypoint: str, page_data: BaseModel
+    datasette, request, *, page_title: str, entrypoint: str, page_data: BaseModel,
+    breadcrumbs: list[dict] | None = None,
 ) -> Response:
     return Response.html(
         await datasette.render_template(
@@ -21,6 +22,7 @@ async def render_page(
                 "page_title": page_title,
                 "entrypoint": entrypoint,
                 "page_data": page_data.model_dump(),
+                "breadcrumbs": breadcrumbs or [],
             },
             request=request,
         )
@@ -58,6 +60,19 @@ def extract_config_fields(form_class) -> list[NotifierConfigField]:
     return fields
 
 
+def _base_crumbs(datasette, db_name: str) -> list[dict]:
+    return [
+        {"href": datasette.urls.instance(), "label": "home"},
+        {"href": datasette.urls.database(db_name), "label": db_name},
+    ]
+
+
+def _alerts_crumbs(datasette, db_name: str) -> list[dict]:
+    return _base_crumbs(datasette, db_name) + [
+        {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts"), "label": "Alerts"},
+    ]
+
+
 @router.GET(r"/-/(?P<db_name>[^/]+)/datasette-alerts$")
 @check_permission()
 async def ui_alerts_list(datasette, request, db_name: str):
@@ -75,6 +90,7 @@ async def ui_alerts_list(datasette, request, db_name: str):
         page_title=f"Alerts — {db_name}",
         entrypoint="src/pages/alerts_list/index.ts",
         page_data=AlertsListPageData(database_name=db_name, alerts=alerts),
+        breadcrumbs=_alerts_crumbs(datasette, db_name),
     )
 
 
@@ -96,6 +112,9 @@ async def ui_alert_detail(datasette, request, db_name: str, alert_id: str):
         page_title=f"Alert — {detail['table_name']}",
         entrypoint="src/pages/alert_detail/index.ts",
         page_data=AlertDetailPageData(**detail),
+        breadcrumbs=_alerts_crumbs(datasette, db_name) + [
+            {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts/alerts/{alert_id}"), "label": detail["table_name"]},
+        ],
     )
 
 
@@ -144,6 +163,9 @@ async def ui_new_alert(datasette, request, db_name: str):
             notifiers=notifier_infos,
             filter_params=filter_params,
         ),
+        breadcrumbs=_alerts_crumbs(datasette, db_name) + [
+            {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts/new"), "label": "New Alert"},
+        ],
     )
 
 

@@ -20,7 +20,7 @@
   }
 
   const params = new URLSearchParams(window.location.search);
-  let alertType = $state(params.get("alert_type") ?? "cursor");
+  let alertType = $state(params.get("alert_type") ?? "trigger");
   let tableName = $state("");
   let idColumns: string[] = $state([]);
   let timestampColumn = $state("");

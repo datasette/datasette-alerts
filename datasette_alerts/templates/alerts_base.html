@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title }}{% endblock %}
+{% block crumbs %}
+<p class="crumbs">
+  {% for crumb in breadcrumbs %}
+    <a href="{{ crumb.href }}">{{ crumb.label }}</a>
+    {% if not loop.last %}/{% endif %}
+  {% endfor %}
+</p>
+{% endblock %}
 {% block extra_head %}
 {{ datasette_alerts_vite_entry(entrypoint) | safe }}
 <script type="application/json" id="pageData">{{ page_data | tojson }}</script>
