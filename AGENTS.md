@@ -58,13 +58,22 @@ Server → `page_data.model_dump()` → JSON in `<script id="pageData">` → `lo
 All routes are scoped under `/-/{db_name}/datasette-alerts/`:
 
 - `GET /-/{db}/datasette-alerts` — alerts list page
-- `GET /-/{db}/datasette-alerts/new` — new alert form
+- `GET /-/{db}/datasette-alerts/new` — new alert form (defaults to trigger type)
 - `GET /-/{db}/datasette-alerts/alerts/{alert_id}` — alert detail page
 - `POST /-/{db}/datasette-alerts/api/new` — create alert API
+- `POST /-/{db}/datasette-alerts/api/alerts/{alert_id}/delete` — delete alert API
 
 Regex patterns with `$` anchor and named groups for path params:
 `r"/-/(?P<db_name>[^/]+)/datasette-alerts$"`
 Named groups are passed as kwargs through `check_permission()` decorator.
+
+### Breadcrumbs
+
+All alert pages render breadcrumbs via the `{% block crumbs %}` override in `alerts_base.html`. Routes pass a `breadcrumbs` list of `{"href": ..., "label": ...}` dicts to `render_page()`. Use `datasette.urls` methods (`instance()`, `database()`, `path()`) for all hrefs to respect `base_url`.
+
+### CSRF
+
+Datasette exempts `Content-Type: application/json` requests from CSRF checks. Frontend API calls must send JSON body + header (e.g. `{ method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }`).
 
 ## Datasette JSON API (used by frontend)
 
@@ -75,7 +84,9 @@ Named groups are passed as kwargs through `check_permission()` decorator.
 
 - All queries use `execute_write_fn` (even reads) on the internal database
 - Tables: `datasette_alerts_alerts`, `datasette_alerts_subscriptions`, `datasette_alerts_alert_logs`
+- Per-alert queue tables in user DB: `_datasette_alerts_queue_{alert_id}` (trigger alerts only)
 - IDs are ULIDs via `ulid_new()`
+- Deleting an alert removes subscriptions + logs from internal DB, and drops queue table + trigger from user DB
 
 ## Hooks Used
 
@@ -132,6 +143,10 @@ Located in `frontend/src/lib/template-editor/`:
 - `VariableMenu.svelte` — dropdown to insert variable nodes at cursor
 
 The editor stores ProseMirror JSON in subscription meta (not plain text). No JS is required in notifier plugins — the alerts plugin frontend handles all rendering.
+
+## Pydantic Models
+
+`page_data.py` models are serialized to JSON for the frontend. Fields that may be NULL in the DB (e.g. `frequency` for trigger alerts) must use `str | None` in the model to avoid validation errors.
 
 ## Frontend Stack
 
