@@ -4,6 +4,7 @@
   import { loadPageData } from "../../page_data/load";
   import type { NewAlertPageData } from "../../page_data/NewAlertPageData.types";
   import AlertDetailsFields from "./AlertDetailsFields.svelte";
+  import TriggerFields from "./TriggerFields.svelte";
   import NotifierSelector from "./NotifierSelector.svelte";
 
   const client = createClient<paths>({ baseUrl: "/" });
@@ -11,12 +12,15 @@
   const pageData = loadPageData<NewAlertPageData>();
   const notifiers = pageData.notifiers ?? [];
   const database = pageData.database_name;
+  const initialFilterParams = pageData.filter_params ?? [];
 
   interface ColumnInfo {
     name: string;
     pk: number;
   }
 
+  const params = new URLSearchParams(window.location.search);
+  let alertType = $state(params.get("alert_type") ?? "cursor");
   let tableName = $state("");
   let idColumns: string[] = $state([]);
   let timestampColumn = $state("");
@@ -30,8 +34,8 @@
   let tables: string[] = $state([]);
   let columns: ColumnInfo[] = $state([]);
 
-  function queryUrl(sql: string, params?: Record<string, string>): string {
-    const qs = new URLSearchParams({ sql, _shape: "array", ...params });
+  function queryUrl(sql: string, qparams?: Record<string, string>): string {
+    const qs = new URLSearchParams({ sql, _shape: "array", ...qparams });
     return `/${database}/-/query.json?${qs}`;
   }
 
@@ -78,7 +82,6 @@
   }
 
   // Auto-fill from URL params
-  const params = new URLSearchParams(window.location.search);
   if (params.has("table_name")) {
     tableName = params.get("table_name")!;
   }
@@ -100,12 +103,10 @@
     submitting = true;
 
     try {
-      const body = {
+      const body: Record<string, unknown> = {
         database_name: database,
         table_name: tableName,
-        id_columns: idColumns,
-        timestamp_column: timestampColumn,
-        frequency,
+        alert_type: alertType,
         subscriptions: [
           {
             notifier_slug: selectedNotifier,
@@ -113,6 +114,14 @@
           },
         ],
       };
+
+      if (alertType === "cursor") {
+        body.id_columns = idColumns;
+        body.timestamp_column = timestampColumn;
+        body.frequency = frequency;
+      } else {
+        body.filter_params = initialFilterParams;
+      }
 
       const { data, error: apiError } = await client.POST(
         `/-/${encodeURIComponent(database)}/datasette-alerts/api/new` as any,
@@ -122,7 +131,8 @@
         error = (apiError as Record<string, string>).error ?? "Unknown error";
         return;
       }
-      success = `Alert created (ID: ${data.data?.alert_id})`;
+      const alertId = data.data?.alert_id;
+      window.location.href = `/-/${encodeURIComponent(database)}/datasette-alerts/alerts/${alertId}`;
     } catch (e: unknown) {
       error = e instanceof Error ? e.message : "Unknown error";
     } finally {
@@ -134,15 +144,50 @@
 <div class="alerts-container">
   <h2>Create Alert</h2>
   <form onsubmit={handleSubmit}>
-    <AlertDetailsFields
-      {tableName}
-      {tables}
-      {columns}
-      bind:idColumns
-      bind:timestampColumn
-      bind:frequency
-      onTableChange={onTableChange}
-    />
+    <fieldset class="alert-type-selector">
+      <legend>Alert type</legend>
+      <label>
+        <input
+          type="radio"
+          name="alert_type"
+          value="cursor"
+          checked={alertType === "cursor"}
+          onchange={() => (alertType = "cursor")}
+        />
+        Cursor
+        <span class="type-desc">Poll on a schedule, tracking new rows via a timestamp column</span>
+      </label>
+      <label>
+        <input
+          type="radio"
+          name="alert_type"
+          value="trigger"
+          checked={alertType === "trigger"}
+          onchange={() => (alertType = "trigger")}
+        />
+        Trigger
+        <span class="type-desc">Real-time notifications via a SQLite INSERT trigger</span>
+      </label>
+    </fieldset>
+
+    {#if alertType === "cursor"}
+      <AlertDetailsFields
+        {tableName}
+        {tables}
+        {columns}
+        bind:idColumns
+        bind:timestampColumn
+        bind:frequency
+        onTableChange={onTableChange}
+      />
+    {:else}
+      <TriggerFields
+        {tableName}
+        {tables}
+        filterParams={initialFilterParams}
+        onTableChange={onTableChange}
+      />
+    {/if}
 
     {#if notifiers.length > 0}
       <NotifierSelector
@@ -184,6 +229,24 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+  }
+  .alert-type-selector {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .alert-type-selector label {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+  .type-desc {
+    font-size: 0.8rem;
+    color: #666;
   }
   .form-actions {
     padding-top: 0.5rem;

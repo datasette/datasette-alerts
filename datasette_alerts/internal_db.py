@@ -27,10 +27,21 @@ class NewSubscription(BaseModel):
 class NewAlertRouteParameters(BaseModel):
     database_name: str
     table_name: str
-    id_columns: List[str]
-    timestamp_column: str
-    frequency: str
+    alert_type: str = "cursor"  # "cursor" | "trigger"
+    # Cursor-specific (optional for trigger)
+    id_columns: List[str] = []
+    timestamp_column: str = ""
+    frequency: str = ""
+    # Trigger-specific
+    filter_params: list[list[str]] = []  # [["col__op", "val"], ...]
+    # Shared
     subscriptions: List[NewSubscription] = []
+
+
+class TriggerAlert(BaseModel):
+    alert_id: str
+    database_name: str
+    table_name: str
 
 
 class Subscription(BaseModel):
@@ -115,7 +126,8 @@ class InternalDB:
                       SET current_schedule_started_at = datetime('now')
                       WHERE next_deadline <= datetime('now')
                         AND current_schedule_started_at IS NULL
-                      RETURNING 
+                        AND alert_type = 'cursor'
+                      RETURNING
                         id,
                         database_name,
                         table_name,
@@ -171,7 +183,8 @@ class InternalDB:
                       FROM datasette_alerts_alert_logs l
                       WHERE l.alert_id = a.id
                         AND json_array_length(l.new_ids) > 0
-                    ) as last_notification_at
+                    ) as last_notification_at,
+                    a.alert_type
                   FROM datasette_alerts_alerts a
                   LEFT JOIN datasette_alerts_subscriptions s ON s.alert_id = a.id
                   WHERE a.database_name = ?
@@ -191,6 +204,7 @@ class InternalDB:
                     "seconds_until_next": row[6],
                     "notifiers": row[7] or "",
                     "last_notification_at": row[8],
+                    "alert_type": row[9],
                 }
                 for row in rows
             ]
@@ -212,7 +226,9 @@ class InternalDB:
                     a.frequency,
                     a.next_deadline,
                     a.alert_created_at,
-                    cast((julianday(a.next_deadline) - julianday('now')) * 86400 as integer) as seconds_until_next
+                    cast((julianday(a.next_deadline) - julianday('now')) * 86400 as integer) as seconds_until_next,
+                    a.alert_type,
+                    a.filter_params
                   FROM datasette_alerts_alerts a
                   WHERE a.id = ?
                 """,
@@ -241,12 +257,14 @@ class InternalDB:
                 "id": row[0],
                 "database_name": row[1],
                 "table_name": row[2],
-                "id_columns": json.loads(row[3]),
-                "timestamp_column": row[4],
-                "frequency": row[5],
+                "id_columns": json.loads(row[3]) if row[3] else [],
+                "timestamp_column": row[4] or "",
+                "frequency": row[5] or "",
                 "next_deadline": row[6],
                 "alert_created_at": row[7],
                 "seconds_until_next": row[8],
+                "alert_type": row[9] or "cursor",
+                "filter_params": json.loads(row[10]) if row[10] else [],
                 "subscriptions": [
                     {"notifier": s[0], "meta": json.loads(s[1])} for s in subs
                 ],
@@ -262,27 +280,56 @@ class InternalDB:
 
         return await self.db.execute_write_fn(read)  # type: ignore
 
-    async def new_alert(self, params: NewAlertRouteParameters, cursor: str) -> str:
+    async def new_alert(self, params: NewAlertRouteParameters, cursor: str | None = None) -> str:
         """Creates a new alert with the given parameters and returns the alert ID."""
 
         def write(conn) -> str:
             with conn:
-                alert_id = conn.execute(
-                    """
-                      INSERT INTO datasette_alerts_alerts(id, alert_creator_id, database_name, table_name, id_columns, timestamp_column, frequency, next_deadline)
-                      VALUES (:id, :alert_creator_id, :database_name, :table_name, :id_columns, :timestamp_column, :frequency, datetime('now', :frequency))
-                      RETURNING id
-                    """,
-                    {
-                        "id": ulid_new(),
-                        "alert_creator_id": "todo",
-                        "database_name": params.database_name,
-                        "table_name": params.table_name,
-                        "id_columns": json.dumps(params.id_columns),
-                        "timestamp_column": params.timestamp_column,
-                        "frequency": params.frequency,
-                    },
-                ).fetchone()[0]
+                if params.alert_type == "trigger":
+                    alert_id = conn.execute(
+                        """
+                          INSERT INTO datasette_alerts_alerts(
+                            id, alert_creator_id, database_name, table_name,
+                            id_columns, alert_type, filter_params
+                          )
+                          VALUES (:id, :alert_creator_id, :database_name, :table_name,
+                                  :id_columns, :alert_type, :filter_params)
+                          RETURNING id
+                        """,
+                        {
+                            "id": ulid_new(),
+                            "alert_creator_id": "todo",
+                            "database_name": params.database_name,
+                            "table_name": params.table_name,
+                            "id_columns": json.dumps(params.id_columns),
+                            "alert_type": "trigger",
+                            "filter_params": json.dumps(params.filter_params) if params.filter_params else None,
+                        },
+                    ).fetchone()[0]
+                else:
+                    alert_id = conn.execute(
+                        """
+                          INSERT INTO datasette_alerts_alerts(
+                            id, alert_creator_id, database_name, table_name,
+                            id_columns, timestamp_column, frequency, next_deadline, alert_type
+                          )
+                          VALUES (:id, :alert_creator_id, :database_name, :table_name,
+                                  :id_columns, :timestamp_column, :frequency,
+                                  datetime('now', :frequency), :alert_type)
+                          RETURNING id
+                        """,
+                        {
+                            "id": ulid_new(),
+                            "alert_creator_id": "todo",
+                            "database_name": params.database_name,
+                            "table_name": params.table_name,
+                            "id_columns": json.dumps(params.id_columns),
+                            "timestamp_column": params.timestamp_column,
+                            "frequency": params.frequency,
+                            "alert_type": "cursor",
+                        },
+                    ).fetchone()[0]
+
                 for subscription in params.subscriptions:
                     conn.execute(
                         """
@@ -297,15 +344,38 @@ class InternalDB:
                         ],
                     )
 
-                conn.execute(
-                    """
-                    INSERT INTO datasette_alerts_alert_logs(id, alert_id, new_ids, cursor)
-                    VALUES (?, ?, json_array(), ?)
-                  """,
-                    [ulid_new(), alert_id, cursor],
-                )
+                if params.alert_type == "cursor" and cursor is not None:
+                    conn.execute(
+                        """
+                        INSERT INTO datasette_alerts_alert_logs(id, alert_id, new_ids, cursor)
+                        VALUES (?, ?, json_array(), ?)
+                      """,
+                        [ulid_new(), alert_id, cursor],
+                    )
             return alert_id
 
-        return await self.db.execute_write_fn(write) # type: ignore
+        return await self.db.execute_write_fn(write)  # type: ignore
+
+    async def get_trigger_alerts(self) -> list[TriggerAlert]:
+        """Return all trigger-type alerts."""
+
+        def read(conn):
+            rows = conn.execute(
+                """
+                  SELECT id, database_name, table_name
+                  FROM datasette_alerts_alerts
+                  WHERE alert_type = 'trigger'
+                """
+            ).fetchall()
+            return [
+                TriggerAlert(
+                    alert_id=row[0],
+                    database_name=row[1],
+                    table_name=row[2],
+                )
+                for row in rows
+            ]
+
+        return await self.db.execute_write_fn(read)  # type: ignore
 
 

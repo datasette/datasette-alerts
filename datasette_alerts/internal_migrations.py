@@ -37,3 +37,15 @@ def m001_initial(db: Database):
           );
         """
     )
+
+
+@internal_migrations()
+def m002_trigger_alerts(db: Database):
+    db.executescript(
+        """
+          ALTER TABLE datasette_alerts_alerts
+            ADD COLUMN alert_type TEXT NOT NULL DEFAULT 'cursor';
+          ALTER TABLE datasette_alerts_alerts
+            ADD COLUMN filter_params TEXT;
+        """
+    )

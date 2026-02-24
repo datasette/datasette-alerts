@@ -7,7 +7,7 @@
   const dbName = pageData.database_name;
 
   function formatSeconds(seconds: number | null | undefined): string {
-    if (seconds == null) return "—";
+    if (seconds == null) return "\u2014";
     if (seconds < 0) return "overdue";
     if (seconds < 60) return `${seconds}s`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
@@ -34,6 +34,7 @@
         <tr>
           <th>Alert</th>
           <th>Table</th>
+          <th>Type</th>
           <th>Notifier</th>
           <th>Frequency</th>
           <th>Next fire</th>
@@ -45,12 +46,17 @@
           <tr>
             <td><a href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/alerts/${alert.id}`}><code>{alert.id}</code></a></td>
             <td><code>{alert.table_name}</code></td>
-            <td>{alert.notifiers}</td>
-            <td>{alert.frequency}</td>
-            <td title={alert.next_deadline ?? ""}>
-              {formatSeconds(alert.seconds_until_next)}
+            <td>
+              <span class="type-badge" class:trigger={alert.alert_type === "trigger"}>
+                {alert.alert_type === "trigger" ? "trigger" : "cursor"}
+              </span>
             </td>
-            <td>{alert.last_notification_at ?? "—"}</td>
+            <td>{alert.notifiers}</td>
+            <td>{alert.alert_type === "trigger" ? "\u2014" : alert.frequency}</td>
+            <td title={alert.next_deadline ?? ""}>
+              {alert.alert_type === "trigger" ? "realtime" : formatSeconds(alert.seconds_until_next)}
+            </td>
+            <td>{alert.last_notification_at ?? "\u2014"}</td>
           </tr>
         {/each}
       </tbody>
@@ -98,5 +104,17 @@
   }
   .alerts-table th {
     font-weight: 600;
+  }
+  .type-badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    background: #f0f0f0;
+    color: #555;
+  }
+  .type-badge.trigger {
+    background: #e8f0fe;
+    color: #1a4d8f;
   }
 </style>

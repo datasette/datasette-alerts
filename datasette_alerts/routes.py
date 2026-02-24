@@ -8,6 +8,7 @@ from .internal_db import InternalDB, NewAlertRouteParameters
 from .page_data import AlertDetailPageData, AlertInfo, AlertsListPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
 from .router import router, check_permission
 from .bg_task import get_notifiers
+from .trigger_db import create_queue_and_trigger
 
 
 async def render_page(
@@ -111,12 +112,26 @@ async def ui_new_alert(datasette, request, db_name: str):
                 config_fields=config_fields,
             )
         )
+    # Extract filter params from URL (non-_ params, or params with __ in them)
+    filter_params = []
+    for key in request.args:
+        if key.startswith("_") and "__" not in key:
+            continue
+        if key in ("table_name", "alert_type"):
+            continue
+        for v in request.args.getlist(key):
+            filter_params.append([key, v])
+
     return await render_page(
         datasette,
         request,
         page_title="Create Alert",
         entrypoint="src/pages/new_alert/index.ts",
-        page_data=NewAlertPageData(database_name=db_name, notifiers=notifier_infos),
+        page_data=NewAlertPageData(
+            database_name=db_name,
+            notifiers=notifier_infos,
+            filter_params=filter_params,
+        ),
     )
 
 
@@ -135,9 +150,25 @@ async def api_new_alert(
     body.database_name = db_name
     internal_db = InternalDB(datasette.get_internal_database())
 
-    result = await db.execute(
-        f"select max({body.timestamp_column}) from {body.table_name}"
-    )
-    initial_cursor = result.rows[0][0]
-    alert_id = await internal_db.new_alert(body, initial_cursor)
+    if body.alert_type == "trigger":
+        # Auto-detect PK columns from table schema
+        result = await db.execute(
+            f"select name from pragma_table_info('{body.table_name}') where pk > 0 order by pk"
+        )
+        pk_columns = [row[0] for row in result.rows]
+        if not pk_columns:
+            pk_columns = ["rowid"]
+        body.id_columns = pk_columns
+
+        alert_id = await internal_db.new_alert(body)
+        await create_queue_and_trigger(
+            db, alert_id, body.table_name, pk_columns, body.filter_params
+        )
+    else:
+        result = await db.execute(
+            f"select max({body.timestamp_column}) from {body.table_name}"
+        )
+        initial_cursor = result.rows[0][0]
+        alert_id = await internal_db.new_alert(body, initial_cursor)
+
     return Response.json({"ok": True, "data": {"alert_id": alert_id}})

@@ -3,6 +3,7 @@ from datasette import hookimpl
 from .internal_migrations import internal_migrations
 from sqlite_utils import Database
 from functools import wraps
+from urllib.parse import urlencode
 import asyncio
 import os
 
@@ -83,10 +84,23 @@ def table_actions(datasette, actor, database, table, request):
             action=ALERTS_ACCESS_NAME, actor=actor
         )
         if allowed:
+            # Extract filter params (non-_ params, or params with __ in them)
+            filter_args = []
+            if request and request.args:
+                for key in request.args:
+                    if key.startswith("_") and "__" not in key:
+                        continue
+                    for v in request.args.getlist(key):
+                        filter_args.append((key, v))
+
+            params = urlencode([("table_name", table)] + filter_args)
+            if filter_args:
+                params += "&alert_type=trigger"
+
             return [
                 {
                     "href": datasette.urls.path(
-                        f"/-/{database}/datasette-alerts/new?table_name={table}"
+                        f"/-/{database}/datasette-alerts/new?{params}"
                     ),
                     "label": "Configure new alert",
                     "description": "Receive notifications when new records are added or changed to this table",
