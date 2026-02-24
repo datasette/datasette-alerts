@@ -8,7 +8,7 @@ from .internal_db import InternalDB, NewAlertRouteParameters
 from .page_data import AlertDetailPageData, AlertInfo, AlertsListPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
 from .router import router, check_permission
 from .bg_task import get_notifiers
-from .trigger_db import create_queue_and_trigger
+from .trigger_db import create_queue_and_trigger, drop_queue_and_trigger
 
 
 async def render_page(
@@ -206,3 +206,23 @@ async def api_new_alert(
         alert_id = await internal_db.new_alert(body, initial_cursor)
 
     return Response.json({"ok": True, "data": {"alert_id": alert_id}})
+
+
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/delete$")
+@check_permission()
+async def api_delete_alert(datasette, request, db_name: str, alert_id: str):
+    internal_db = InternalDB(datasette.get_internal_database())
+    info = await internal_db.delete_alert(alert_id)
+    if info is None:
+        return Response.json({"ok": False, "error": "Alert not found"}, status=404)
+
+    # Drop queue table and trigger if this was a trigger alert
+    if info["alert_type"] == "trigger":
+        db = datasette.databases.get(info["database_name"])
+        if db is not None:
+            try:
+                await drop_queue_and_trigger(db, alert_id, info["table_name"])
+            except Exception:
+                pass  # Queue/trigger may already be gone
+
+    return Response.json({"ok": True})

@@ -357,6 +357,25 @@ class InternalDB:
 
         return await self.db.execute_write_fn(write)  # type: ignore
 
+    async def delete_alert(self, alert_id: str) -> dict | None:
+        """Delete an alert and its subscriptions/logs. Returns alert info needed for cleanup, or None if not found."""
+
+        def write(conn):
+            with conn:
+                row = conn.execute(
+                    "SELECT alert_type, database_name, table_name FROM datasette_alerts_alerts WHERE id = ?",
+                    [alert_id],
+                ).fetchone()
+                if row is None:
+                    return None
+                info = {"alert_type": row[0], "database_name": row[1], "table_name": row[2]}
+                conn.execute("DELETE FROM datasette_alerts_alert_logs WHERE alert_id = ?", [alert_id])
+                conn.execute("DELETE FROM datasette_alerts_subscriptions WHERE alert_id = ?", [alert_id])
+                conn.execute("DELETE FROM datasette_alerts_alerts WHERE id = ?", [alert_id])
+                return info
+
+        return await self.db.execute_write_fn(write)  # type: ignore
+
     async def get_trigger_alerts(self) -> list[TriggerAlert]:
         """Return all trigger-type alerts."""
 

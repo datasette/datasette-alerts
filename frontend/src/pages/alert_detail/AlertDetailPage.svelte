@@ -6,6 +6,31 @@
   const alertType = data.alert_type ?? "cursor";
   const filterParams: string[][] = data.filter_params ?? [];
 
+  let deleting = $state(false);
+
+  async function handleDelete() {
+    if (!window.confirm("Are you sure you want to delete this alert? This cannot be undone.")) {
+      return;
+    }
+    deleting = true;
+    try {
+      const resp = await fetch(
+        `/-/${encodeURIComponent(data.database_name)}/datasette-alerts/api/alerts/${data.id}/delete`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+      );
+      const result = await resp.json();
+      if (result.ok) {
+        window.location.href = `/-/${encodeURIComponent(data.database_name)}/datasette-alerts`;
+      } else {
+        alert(result.error ?? "Failed to delete alert");
+      }
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to delete alert");
+    } finally {
+      deleting = false;
+    }
+  }
+
   function formatSeconds(seconds: number | null | undefined): string {
     if (seconds == null) return "\u2014";
     if (seconds < 0) return "overdue";
@@ -125,6 +150,12 @@
       </tbody>
     </table>
   {/if}
+
+  <div class="danger-zone">
+    <button class="delete-btn" onclick={handleDelete} disabled={deleting}>
+      {deleting ? "Deleting..." : "Delete alert"}
+    </button>
+  </div>
 </div>
 
 <style>
@@ -183,5 +214,26 @@
   }
   .logs-table th {
     font-weight: 600;
+  }
+  .danger-zone {
+    margin-top: 2em;
+    padding-top: 1em;
+    border-top: 1px solid #e0e0e0;
+  }
+  .delete-btn {
+    padding: 0.4rem 1rem;
+    border: 1px solid #c00;
+    border-radius: 4px;
+    background: #fff;
+    color: #c00;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .delete-btn:hover {
+    background: #fef2f2;
+  }
+  .delete-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 </style>
