@@ -106,12 +106,31 @@ async def ui_alert_detail(datasette, request, db_name: str, alert_id: str):
     if detail is None:
         return Response.html("Alert not found", status=404)
 
+    notifiers = await get_notifiers(datasette)
+    notifier_infos = []
+    for n in notifiers:
+        config_fields = []
+        try:
+            form_class = await n.get_config_form()
+            config_fields = extract_config_fields(form_class)
+        except NotImplementedError:
+            pass
+        notifier_infos.append(
+            NotifierInfo(
+                slug=n.slug,
+                name=n.name,
+                icon=n.icon,
+                description=n.description,
+                config_fields=config_fields,
+            )
+        )
+
     return await render_page(
         datasette,
         request,
         page_title=f"Alert — {detail['table_name']}",
         entrypoint="src/pages/alert_detail/index.ts",
-        page_data=AlertDetailPageData(**detail),
+        page_data=AlertDetailPageData(**detail, notifiers=notifier_infos),
         breadcrumbs=_alerts_crumbs(datasette, db_name) + [
             {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts/alerts/{alert_id}"), "label": detail["table_name"]},
         ],
@@ -206,6 +225,48 @@ async def api_new_alert(
         alert_id = await internal_db.new_alert(body, initial_cursor)
 
     return Response.json({"ok": True, "data": {"alert_id": alert_id}})
+
+
+class AddSubscriptionBody(BaseModel):
+    notifier_slug: str
+    meta: dict = {}
+
+
+class UpdateSubscriptionBody(BaseModel):
+    meta: dict = {}
+
+
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions$")
+@check_permission()
+async def api_add_subscription(
+    datasette, request, db_name: str, alert_id: str, body: Annotated[AddSubscriptionBody, Body()]
+):
+    internal_db = InternalDB(datasette.get_internal_database())
+    detail = await internal_db.get_alert_detail(alert_id)
+    if detail is None:
+        return Response.json({"ok": False, "error": "Alert not found"}, status=404)
+    sub_id = await internal_db.add_subscription(alert_id, body.notifier_slug, body.meta)
+    return Response.json({"ok": True, "data": {"subscription_id": sub_id}})
+
+
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions/(?P<sub_id>[^/]+)/update$")
+@check_permission()
+async def api_update_subscription(
+    datasette, request, db_name: str, alert_id: str, sub_id: str, body: Annotated[UpdateSubscriptionBody, Body()]
+):
+    internal_db = InternalDB(datasette.get_internal_database())
+    await internal_db.update_subscription(sub_id, body.meta)
+    return Response.json({"ok": True})
+
+
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions/(?P<sub_id>[^/]+)/delete$")
+@check_permission()
+async def api_delete_subscription(
+    datasette, request, db_name: str, alert_id: str, sub_id: str
+):
+    internal_db = InternalDB(datasette.get_internal_database())
+    await internal_db.delete_subscription(sub_id)
+    return Response.json({"ok": True})
 
 
 @router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/delete$")

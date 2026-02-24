@@ -6,17 +6,17 @@
 
   interface Props {
     notifiers: Notifier[];
-    selectedSlug: string;
-    meta: Record<string, any>;
     columns: string[];
-    onchange: (slug: string, meta: Record<string, any>) => void;
-    onmetachange: (meta: Record<string, any>) => void;
+    onadd: (slug: string, meta: Record<string, any>) => void;
   }
 
-  let { notifiers, selectedSlug, meta, columns, onchange, onmetachange }: Props =
-    $props();
+  let { notifiers, columns, onadd }: Props = $props();
 
-  function initDefaults(notifier: Notifier): Record<string, any> {
+  let selectedSlug = $state(notifiers[0]?.slug ?? "");
+  let meta: Record<string, any> = $state(initDefaults(notifiers[0]));
+
+  function initDefaults(notifier: Notifier | undefined): Record<string, any> {
+    if (!notifier) return {};
     const defaults: Record<string, any> = {};
     for (const field of notifier.config_fields ?? []) {
       if (field.field_type === "boolean") {
@@ -40,16 +40,20 @@
       if (isAggregate) {
         return md.aggregate_vars ?? [];
       }
-      // Non-aggregate: use column names
       return columns;
     }
-    // No aggregate_field metadata — show columns as default
     return columns;
+  }
+
+  function handleAdd() {
+    onadd(selectedSlug, { ...meta });
+    // Reset meta to defaults for the current notifier
+    meta = initDefaults(selectedNotifier);
   }
 </script>
 
 <fieldset>
-  <legend>Notifier</legend>
+  <legend>Add notifier</legend>
   <ul class="notifier-list">
     {#each notifiers as notifier}
       <li>
@@ -59,7 +63,10 @@
             name="notifier"
             value={notifier.slug}
             checked={selectedSlug === notifier.slug}
-            onchange={() => onchange(notifier.slug, initDefaults(notifier))}
+            onchange={() => {
+              selectedSlug = notifier.slug;
+              meta = initDefaults(notifier);
+            }}
           />
           {notifier.name}
           {#if notifier.icon}
@@ -69,59 +76,63 @@
       </li>
     {/each}
   </ul>
-</fieldset>
 
-{#if selectedNotifier?.config_fields?.length}
-  <div class="notifier-config">
-    {#each selectedNotifier.config_fields as field (field.name)}
-      <div class="form-field">
-        {#if field.field_type === "boolean"}
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              checked={!!meta[field.name]}
-              onchange={(e) => {
-                const input = e.currentTarget as HTMLInputElement;
-                onmetachange({ ...meta, [field.name]: input.checked });
+  {#if selectedNotifier?.config_fields?.length}
+    <div class="notifier-config">
+      {#each selectedNotifier.config_fields as field (field.name)}
+        <div class="form-field">
+          {#if field.field_type === "boolean"}
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                checked={!!meta[field.name]}
+                onchange={(e) => {
+                  const input = e.currentTarget as HTMLInputElement;
+                  meta = { ...meta, [field.name]: input.checked };
+                }}
+              />
+              {field.label}
+            </label>
+            {#if field.description}
+              <p class="field-description">{field.description}</p>
+            {/if}
+          {:else if field.field_type === "template"}
+            <label for="notifier-{field.name}">{field.label}</label>
+            <TemplateEditor
+              value={meta[field.name] ?? null}
+              variables={getTemplateVariables(field)}
+              onchange={(doc) => {
+                meta = { ...meta, [field.name]: doc };
               }}
             />
-            {field.label}
-          </label>
-          {#if field.description}
-            <p class="field-description">{field.description}</p>
+            {#if field.description}
+              <p class="field-description">{field.description}</p>
+            {/if}
+          {:else}
+            <label for="notifier-{field.name}">{field.label}</label>
+            <input
+              type="text"
+              id="notifier-{field.name}"
+              placeholder={field.placeholder}
+              value={meta[field.name] ?? ""}
+              oninput={(e) => {
+                const input = e.currentTarget as HTMLInputElement;
+                meta = { ...meta, [field.name]: input.value };
+              }}
+            />
+            {#if field.description}
+              <p class="field-description">{field.description}</p>
+            {/if}
           {/if}
-        {:else if field.field_type === "template"}
-          <label for="notifier-{field.name}">{field.label}</label>
-          <TemplateEditor
-            value={meta[field.name] ?? null}
-            variables={getTemplateVariables(field)}
-            onchange={(doc) => {
-              onmetachange({ ...meta, [field.name]: doc });
-            }}
-          />
-          {#if field.description}
-            <p class="field-description">{field.description}</p>
-          {/if}
-        {:else}
-          <label for="notifier-{field.name}">{field.label}</label>
-          <input
-            type="text"
-            id="notifier-{field.name}"
-            placeholder={field.placeholder}
-            value={meta[field.name] ?? ""}
-            oninput={(e) => {
-              const input = e.currentTarget as HTMLInputElement;
-              onmetachange({ ...meta, [field.name]: input.value });
-            }}
-          />
-          {#if field.description}
-            <p class="field-description">{field.description}</p>
-          {/if}
-        {/if}
-      </div>
-    {/each}
+        </div>
+      {/each}
+    </div>
+  {/if}
+
+  <div class="add-action">
+    <button type="button" onclick={handleAdd}>Add notifier</button>
   </div>
-{/if}
+</fieldset>
 
 <style>
   fieldset {
@@ -151,6 +162,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    margin-top: 0.75rem;
   }
   .form-field {
     display: flex;
@@ -177,5 +189,18 @@
     font-size: 0.8rem;
     color: #666;
     margin: 0;
+  }
+  .add-action {
+    margin-top: 0.75rem;
+  }
+  .add-action button {
+    padding: 0.3rem 0.8rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #f8f8f8;
+  }
+  .add-action button:hover {
+    background: #eee;
   }
 </style>

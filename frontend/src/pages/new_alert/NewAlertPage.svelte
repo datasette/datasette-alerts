@@ -19,20 +19,28 @@
     pk: number;
   }
 
+  interface SubscriptionEntry {
+    notifier_slug: string;
+    meta: Record<string, any>;
+  }
+
   const params = new URLSearchParams(window.location.search);
   let alertType = $state(params.get("alert_type") ?? "trigger");
   let tableName = $state("");
   let idColumns: string[] = $state([]);
   let timestampColumn = $state("");
   let frequency = $state("");
-  let selectedNotifier = $state(notifiers[0]?.slug ?? "");
-  let notifierMeta: Record<string, any> = $state({});
+  let subscriptions: SubscriptionEntry[] = $state([]);
   let submitting = $state(false);
   let error: string | null = $state(null);
   let success: string | null = $state(null);
 
   let tables: string[] = $state([]);
   let columns: ColumnInfo[] = $state([]);
+
+  function notifierName(slug: string): string {
+    return notifiers.find((n) => n.slug === slug)?.name ?? slug;
+  }
 
   function queryUrl(sql: string, qparams?: Record<string, string>): string {
     const qs = new URLSearchParams({ sql, _shape: "array", ...qparams });
@@ -96,6 +104,14 @@
     fetchColumns(newTable);
   }
 
+  function handleAddSubscription(slug: string, meta: Record<string, any>) {
+    subscriptions = [...subscriptions, { notifier_slug: slug, meta }];
+  }
+
+  function handleRemoveSubscription(index: number) {
+    subscriptions = subscriptions.filter((_, i) => i !== index);
+  }
+
   async function handleSubmit(e: Event) {
     e.preventDefault();
     error = null;
@@ -107,12 +123,7 @@
         database_name: database,
         table_name: tableName,
         alert_type: alertType,
-        subscriptions: [
-          {
-            notifier_slug: selectedNotifier,
-            meta: notifierMeta,
-          },
-        ],
+        subscriptions,
       };
 
       if (alertType === "cursor") {
@@ -189,24 +200,28 @@
       />
     {/if}
 
+    {#if subscriptions.length > 0}
+      <fieldset class="subscriptions-list">
+        <legend>Configured notifiers ({subscriptions.length})</legend>
+        {#each subscriptions as sub, i}
+          <div class="subscription-item">
+            <span class="sub-name">{notifierName(sub.notifier_slug)}</span>
+            <button type="button" class="remove-btn" onclick={() => handleRemoveSubscription(i)}>Remove</button>
+          </div>
+        {/each}
+      </fieldset>
+    {/if}
+
     {#if notifiers.length > 0}
       <NotifierSelector
         {notifiers}
-        selectedSlug={selectedNotifier}
-        meta={notifierMeta}
         columns={columns.map(c => c.name)}
-        onchange={(slug, meta) => {
-          selectedNotifier = slug;
-          notifierMeta = meta;
-        }}
-        onmetachange={(meta) => {
-          notifierMeta = meta;
-        }}
+        onadd={handleAddSubscription}
       />
     {/if}
 
     <div class="form-actions">
-      <button type="submit" disabled={submitting}>
+      <button type="submit" disabled={submitting || subscriptions.length === 0}>
         {submitting ? "Creating..." : "Create Alert"}
       </button>
     </div>
@@ -248,6 +263,38 @@
   .type-desc {
     font-size: 0.8rem;
     color: #666;
+  }
+  .subscriptions-list {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .subscription-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0.6rem;
+    background: #f8f8f8;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+  }
+  .sub-name {
+    font-weight: 500;
+  }
+  .remove-btn {
+    padding: 0.2rem 0.5rem;
+    border: 1px solid #c00;
+    border-radius: 4px;
+    background: #fff;
+    color: #c00;
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+  .remove-btn:hover {
+    background: #fef2f2;
   }
   .form-actions {
     padding-top: 0.5rem;

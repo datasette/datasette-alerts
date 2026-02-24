@@ -239,7 +239,7 @@ class InternalDB:
                 return None
 
             subs = conn.execute(
-                "SELECT notifier, meta FROM datasette_alerts_subscriptions WHERE alert_id = ?",
+                "SELECT id, notifier, meta FROM datasette_alerts_subscriptions WHERE alert_id = ?",
                 [alert_id],
             ).fetchall()
 
@@ -267,7 +267,7 @@ class InternalDB:
                 "alert_type": row[9] or "cursor",
                 "filter_params": json.loads(row[10]) if row[10] else [],
                 "subscriptions": [
-                    {"notifier": s[0], "meta": json.loads(s[1])} for s in subs
+                    {"id": s[0], "notifier": s[1], "meta": json.loads(s[2])} for s in subs
                 ],
                 "logs": [
                     {
@@ -375,6 +375,47 @@ class InternalDB:
                 return info
 
         return await self.db.execute_write_fn(write)  # type: ignore
+
+    async def add_subscription(self, alert_id: str, notifier_slug: str, meta: dict) -> str:
+        """Add a subscription to an existing alert. Returns the new subscription ID."""
+
+        def write(conn) -> str:
+            with conn:
+                sub_id = ulid_new()
+                conn.execute(
+                    """
+                    INSERT INTO datasette_alerts_subscriptions(id, alert_id, notifier, meta)
+                    VALUES (?, ?, ?, json(?))
+                    """,
+                    [sub_id, alert_id, notifier_slug, json.dumps(meta)],
+                )
+                return sub_id
+
+        return await self.db.execute_write_fn(write)  # type: ignore
+
+    async def update_subscription(self, subscription_id: str, meta: dict):
+        """Update a subscription's meta JSON."""
+
+        def write(conn):
+            with conn:
+                conn.execute(
+                    "UPDATE datasette_alerts_subscriptions SET meta = json(?) WHERE id = ?",
+                    [json.dumps(meta), subscription_id],
+                )
+
+        return await self.db.execute_write_fn(write)
+
+    async def delete_subscription(self, subscription_id: str):
+        """Delete a subscription."""
+
+        def write(conn):
+            with conn:
+                conn.execute(
+                    "DELETE FROM datasette_alerts_subscriptions WHERE id = ?",
+                    [subscription_id],
+                )
+
+        return await self.db.execute_write_fn(write)
 
     async def get_trigger_alerts(self) -> list[TriggerAlert]:
         """Return all trigger-type alerts."""

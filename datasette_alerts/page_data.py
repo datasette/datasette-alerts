@@ -56,6 +56,7 @@ class AlertsListPageData(BaseModel):
 
 
 class AlertSubscriptionInfo(BaseModel):
+    id: str
     notifier: str
     meta: dict = {}
 
@@ -81,6 +82,7 @@ class AlertDetailPageData(BaseModel):
     filter_params: list[list[str]] = []
     subscriptions: list[AlertSubscriptionInfo] = []
     logs: list[AlertLogEntry] = []
+    notifiers: list[NotifierInfo] = []
 
 
 __exports__ = [NewAlertPageData, AlertsListPageData, AlertDetailPageData]

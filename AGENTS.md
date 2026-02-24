@@ -61,6 +61,9 @@ All routes are scoped under `/-/{db_name}/datasette-alerts/`:
 - `GET /-/{db}/datasette-alerts/new` — new alert form (defaults to trigger type)
 - `GET /-/{db}/datasette-alerts/alerts/{alert_id}` — alert detail page
 - `POST /-/{db}/datasette-alerts/api/new` — create alert API
+- `POST /-/{db}/datasette-alerts/api/alerts/{alert_id}/subscriptions` — add subscription
+- `POST /-/{db}/datasette-alerts/api/alerts/{alert_id}/subscriptions/{sub_id}/update` — update subscription meta
+- `POST /-/{db}/datasette-alerts/api/alerts/{alert_id}/subscriptions/{sub_id}/delete` — delete subscription
 - `POST /-/{db}/datasette-alerts/api/alerts/{alert_id}/delete` — delete alert API
 
 Regex patterns with `$` anchor and named groups for path params:
