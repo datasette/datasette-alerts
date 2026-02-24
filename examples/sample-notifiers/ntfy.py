@@ -2,8 +2,9 @@
 
 from datasette import hookimpl
 from datasette_alerts import Notifier
+from datasette_alerts.template import resolve_template
 import httpx
-from wtforms import Form, StringField
+from wtforms import Form, StringField, BooleanField
 
 
 @hookimpl
@@ -31,33 +32,56 @@ class Ntfy(Notifier):
                 "Topic",
                 description="...",
             )
+            aggregate = BooleanField(
+                "Aggregate mode",
+                description="Send one notification per batch instead of one per row",
+            )
+            message_template = StringField(
+                "Message template",
+                render_kw={
+                    "field_type": "template",
+                    "metadata": {
+                        "aggregate_field": "aggregate",
+                        "aggregate_vars": ["count", "table_name"],
+                    },
+                },
+            )
 
         return ConfigForm
 
-    async def send(self, alert_id, new_ids, config: dict):
-        title = f"{len(new_ids)} new items in {'TODO'}"
-        message = "\n".join([f"- `{id}` " for id in new_ids])
-        link = "https://datasette.io"
-        # https://docs.ntfy.sh/publish/#publish-as-json
-        print(config)
-        send_ntfy(
-            config["base_url"],
-            config["topic"],
-            title,
-            message,
-            link,
-        )
+    async def send(self, alert_id, new_ids, config: dict, **kwargs):
+        base_url = config["base_url"]
+        topic = config["topic"]
+        template_json = config.get("message_template")
+        aggregate = config.get("aggregate", True)
+
+        if template_json and isinstance(template_json, dict):
+            if aggregate or not kwargs.get("row_data"):
+                message = resolve_template(template_json, {
+                    "count": str(len(new_ids)),
+                    "table_name": kwargs.get("table_name", ""),
+                })
+                _send_ntfy(base_url, topic, message)
+            else:
+                for row in kwargs["row_data"]:
+                    message = resolve_template(
+                        template_json,
+                        {k: str(v) for k, v in row.items()},
+                    )
+                    _send_ntfy(base_url, topic, message)
+        else:
+            title = f"{len(new_ids)} new items"
+            message = "\n".join([f"- `{id}` " for id in new_ids])
+            _send_ntfy(base_url, topic, title, message)
 
 
-def send_ntfy(url, topic, title, message, link):
-    json = {
+def _send_ntfy(url: str, topic: str, title: str, message: str | None = None):
+    # https://docs.ntfy.sh/publish/#publish-as-json
+    payload = {
         "topic": topic,
         "title": title,
-        "message": message,
-        # "click": {"link": link},
         "markdown": True,
     }
-    httpx.post(
-        url,
-        json=json,
-    )
+    if message:
+        payload["message"] = message
+    httpx.post(url, json=payload)

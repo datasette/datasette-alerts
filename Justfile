@@ -29,6 +29,7 @@ frontend-dev *flags:
 # Development servers
 dev *flags:
   DATASETTE_SECRET=abc123 \
+  DATASETTE_LIBFEC_BIN_PATH=$HOME/projects/libfec/target/debug/libfec \
   watchexec \
     --stop-signal SIGKILL \
     --ignore '*.db' \
@@ -42,11 +43,14 @@ dev *flags:
     --with datasette-visible-internal-db \
     --with datasette-write-ui \
     --with notify-py \
+    --with ../datasette-libfec \
+    --with libfec \
     datasette \
       --root \
       --plugins-dir=examples/sample-notifiers \
       dbg.db -p 7006 \
       -s permissions.datasette-alerts-access.id root \
+      -s plugins.datasette-libfec.rss-sync-interval-seconds 300 \
       {{flags}}
 
 dev-with-hmr *flags:

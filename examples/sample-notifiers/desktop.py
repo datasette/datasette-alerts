@@ -1,12 +1,11 @@
 from notifypy import Notify
 
-
-# https://icons.getbootstrap.com/icons/discord/
+# https://icons.getbootstrap.com/icons/terminal/
 
 from datasette import hookimpl
 from datasette_alerts import Notifier
-import httpx
-from wtforms import Form, StringField
+from datasette_alerts.template import resolve_template
+from wtforms import Form, StringField, BooleanField
 
 
 @hookimpl
@@ -25,14 +24,49 @@ class DesktopNotifier(Notifier):
 
     async def get_config_form(self):
         class ConfigForm(Form):
-            title = StringField()
+            title = StringField("Title")
+            aggregate = BooleanField(
+                "Aggregate mode",
+                description="Send one notification per batch instead of one per row",
+            )
+            message_template = StringField(
+                "Message template",
+                render_kw={
+                    "field_type": "template",
+                    "metadata": {
+                        "aggregate_field": "aggregate",
+                        "aggregate_vars": ["count", "table_name"],
+                    },
+                },
+            )
 
         return ConfigForm
 
-    async def send(self, alert_id, new_ids, config: dict):
-        message = f"{len(new_ids)} new items in {'TODO'}"
-        print(message)
-        notification = Notify()
-        notification.title = config["title"]
-        notification.message = message
-        notification.send()
+    async def send(self, alert_id, new_ids, config: dict, **kwargs):
+        title = config.get("title", "Datasette Alert")
+        template_json = config.get("message_template")
+        aggregate = config.get("aggregate", True)
+
+        if template_json and isinstance(template_json, dict):
+            if aggregate or not kwargs.get("row_data"):
+                message = resolve_template(template_json, {
+                    "count": str(len(new_ids)),
+                    "table_name": kwargs.get("table_name", ""),
+                })
+                _send_notification(title, message)
+            else:
+                for row in kwargs["row_data"]:
+                    message = resolve_template(
+                        template_json,
+                        {k: str(v) for k, v in row.items()},
+                    )
+                    _send_notification(title, message)
+        else:
+            _send_notification(title, f"{len(new_ids)} new items")
+
+
+def _send_notification(title: str, message: str):
+    notification = Notify()
+    notification.title = title
+    notification.message = message
+    notification.send()

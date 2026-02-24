@@ -29,18 +29,30 @@ async def render_page(
 
 def extract_config_fields(form_class) -> list[NotifierConfigField]:
     """Extract field metadata from a WTForms Form class."""
+    from wtforms import BooleanField
+
     form = form_class()
     fields = []
     for field in form:
         render_kw = field.render_kw or {}
+
+        # Determine field_type: explicit render_kw override, BooleanField detection, or default "text"
+        if "field_type" in render_kw:
+            field_type = render_kw["field_type"]
+        elif isinstance(field, BooleanField):
+            field_type = "boolean"
+        else:
+            field_type = "text"
+
         fields.append(
             NotifierConfigField(
                 name=field.name,
                 label=str(field.label.text) if field.label else field.name,
-                field_type="text",
+                field_type=field_type,
                 placeholder=render_kw.get("placeholder", ""),
                 description=field.description or "",
                 default=str(field.default) if field.default else "",
+                metadata=render_kw.get("metadata", {}),
             )
         )
     return fields

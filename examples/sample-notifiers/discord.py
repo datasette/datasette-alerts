@@ -2,8 +2,9 @@
 
 from datasette import hookimpl
 from datasette_alerts import Notifier
+from datasette_alerts.template import resolve_template
 import httpx
-from wtforms import Form, StringField
+from wtforms import Form, StringField, BooleanField
 
 
 @hookimpl
@@ -27,15 +28,46 @@ class DiscordNotifier(Notifier):
                 render_kw={"placeholder": "https://discord.com/api/webhooks/..."},
                 description="",
             )
+            aggregate = BooleanField(
+                "Aggregate mode",
+                description="Send one message per batch instead of one per row",
+            )
+            message_template = StringField(
+                "Message template",
+                render_kw={
+                    "field_type": "template",
+                    "metadata": {
+                        "aggregate_field": "aggregate",
+                        "aggregate_vars": ["count", "table_name"],
+                    },
+                },
+            )
 
         return ConfigForm
 
-    async def send(self, alert_id, new_ids, config: dict):
+    async def send(self, alert_id, new_ids, config: dict, **kwargs):
         url = config["webhook_url"]
-        content = f"{len(new_ids)} new items in {'TODO'}"
-        # https://discord.com/developers/docs/resources/webhook#execute-webhook
-        json = {"content": content}
-        httpx.post(
-            url,
-            json=json,
-        )
+        template_json = config.get("message_template")
+        aggregate = config.get("aggregate", True)
+
+        if template_json and isinstance(template_json, dict):
+            if aggregate or not kwargs.get("row_data"):
+                # One message with aggregate variables
+                text = resolve_template(template_json, {
+                    "count": str(len(new_ids)),
+                    "table_name": kwargs.get("table_name", ""),
+                })
+                httpx.post(url, json={"content": text})
+            else:
+                # One message per row
+                for row in kwargs["row_data"]:
+                    text = resolve_template(
+                        template_json,
+                        {k: str(v) for k, v in row.items()},
+                    )
+                    httpx.post(url, json={"content": text})
+        else:
+            # Fallback (no template)
+            content = f"{len(new_ids)} new items"
+            # https://discord.com/developers/docs/resources/webhook#execute-webhook
+            httpx.post(url, json={"content": content})

@@ -42,6 +42,7 @@ class TriggerAlert(BaseModel):
     alert_id: str
     database_name: str
     table_name: str
+    id_columns: List[str] = []
 
 
 class Subscription(BaseModel):
@@ -362,7 +363,7 @@ class InternalDB:
         def read(conn):
             rows = conn.execute(
                 """
-                  SELECT id, database_name, table_name
+                  SELECT id, database_name, table_name, id_columns
                   FROM datasette_alerts_alerts
                   WHERE alert_type = 'trigger'
                 """
@@ -372,6 +373,7 @@ class InternalDB:
                     alert_id=row[0],
                     database_name=row[1],
                     table_name=row[2],
+                    id_columns=json.loads(row[3]) if row[3] else [],
                 )
                 for row in rows
             ]

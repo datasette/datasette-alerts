@@ -8,6 +8,7 @@ class NotifierConfigField(BaseModel):
     placeholder: str = ""
     description: str = ""
     default: str = ""
+    metadata: dict = {}
 
 
 class NotifierInfo(BaseModel):
@@ -39,7 +40,7 @@ class AlertInfo(BaseModel):
     id: str
     database_name: str
     table_name: str
-    frequency: str = ""
+    frequency: str | None = ""
     next_deadline: str | None = None
     seconds_until_next: int | None = None
     alert_created_at: str | None = None

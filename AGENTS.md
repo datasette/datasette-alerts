@@ -17,10 +17,12 @@ datasette_alerts/          # Python package (plugin)
   router.py                # Shared Router instance, check_permission decorator, ALERTS_ACCESS_NAME
   internal_db.py           # InternalDB class — all DB queries via execute_write_fn
   internal_migrations.py   # sqlite-migrate migrations (NO new migrations without permission)
-  bg_task.py               # Background loop: polls alerts, runs notifiers
+  bg_task.py               # Background loop: polls alerts, runs notifiers, fetches row data
   notifier.py              # Abstract Notifier base class
   hookspecs.py             # datasette_alerts_register_notifiers hook
   page_data.py             # Pydantic models for page data
+  template.py              # resolve_template() — walks ProseMirror JSON, substitutes variables
+  trigger_db.py            # Queue table + INSERT trigger management per alert
   manifest.json            # Vite build manifest (generated)
   templates/alerts_base.html  # Single shared template for all Svelte pages
   static/gen/              # Built JS/CSS bundles (generated)
@@ -28,6 +30,7 @@ datasette_alerts/          # Python package (plugin)
 frontend/                  # Vite + Svelte 5 + TypeScript
   src/pages/*/index.ts     # Entry points (one per page)
   src/pages/*/             # Svelte components per page
+  src/lib/template-editor/ # ProseMirror template editor components
   src/page_data/           # JSON schemas → auto-generated .types.ts
   vite.config.ts           # Entry points defined in rollupOptions.input
   api.d.ts                 # Generated OpenAPI types
@@ -90,9 +93,50 @@ Plugins implement `datasette_alerts_register_notifiers` hook returning `Notifier
 Each notifier has: `slug`, `name`, `description`, `icon`, `get_config_form()` (WTForms), `send()`.
 Examples in `examples/sample-notifiers/`.
 
+### Config Field Types
+
+`extract_config_fields()` in `routes.py` converts WTForms fields to `NotifierConfigField` for the frontend:
+
+- **text** (default) — rendered as `<input type="text">`
+- **boolean** — auto-detected from `BooleanField`, rendered as checkbox
+- **template** — set via `render_kw={"field_type": "template"}`, rendered as ProseMirror editor
+
+Custom field types and metadata are declared in `render_kw`:
+```python
+message_template = StringField("Message template", render_kw={
+    "field_type": "template",
+    "metadata": {
+        "aggregate_field": "aggregate",           # which boolean controls variable set
+        "aggregate_vars": ["count", "table_name"], # vars when aggregate=true
+    },
+})
+```
+
+When `aggregate=true`: template variables are `count`, `table_name`.
+When `aggregate=false`: template variables are column names from the selected table.
+
+### Aggregate Mode + Message Templates
+
+Notifiers can offer an **aggregate toggle** (1-message-per-batch vs 1-message-per-row) and a **message template** (ProseMirror editor with `{{variable}}` pill nodes).
+
+The `send()` method receives keyword args: `row_data` (list of dicts when non-aggregate), `table_name`, `database_name`. Existing notifiers using `**kwargs` remain backwards-compatible.
+
+Template resolution: `datasette_alerts/template.py` has `resolve_template(template_doc, variables)` which walks ProseMirror JSON, substitutes `templateVariable` nodes, returns plain text.
+
+### ProseMirror Template Editor
+
+Located in `frontend/src/lib/template-editor/`:
+
+- `schema.ts` — ProseMirror schema with `doc`, `paragraph`, `text`, and `templateVariable` (inline atom node with `varName` attr)
+- `TemplateEditor.svelte` — wraps `EditorView`, emits `doc.toJSON()` on change
+- `VariableMenu.svelte` — dropdown to insert variable nodes at cursor
+
+The editor stores ProseMirror JSON in subscription meta (not plain text). No JS is required in notifier plugins — the alerts plugin frontend handles all rendering.
+
 ## Frontend Stack
 
 - Svelte 5 (runes: `$state`, `$derived`)
 - openapi-fetch for typed API calls
+- ProseMirror for template editing (prosemirror-model, -state, -view, -keymap, -history, -commands)
 - json-schema-to-typescript for page data types (auto-compiled on build via vite plugin)
 - Build output goes to `datasette_alerts/static/gen/` with manifest

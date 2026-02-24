@@ -74,6 +74,11 @@
       </dd>
     {/if}
 
+    {#if alertType === "trigger"}
+      <dt>Queue</dt>
+      <dd><a class="queue-link" href={`/${encodeURIComponent(data.database_name)}/_datasette_alerts_queue_${data.id}`}>_datasette_alerts_queue_{data.id}</a></dd>
+    {/if}
+
     <dt>Created</dt>
     <dd>{data.alert_created_at ?? "\u2014"}</dd>
 
@@ -153,6 +158,11 @@
     border-radius: 12px;
     font-size: 0.85rem;
     color: #1a4d8f;
+  }
+  .queue-link {
+    font-size: 0.8rem;
+    color: #888;
+    font-family: monospace;
   }
   h3 {
     margin-top: 1.5em;

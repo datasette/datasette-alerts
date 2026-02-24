@@ -1,3 +1,5 @@
+import json
+
 from .internal_db import InternalDB, ReadyJob, TriggerAlert
 from datasette.utils import await_me_maybe
 from typing import List
@@ -7,6 +9,18 @@ from datasette.plugins import pm
 from .notifier import Notifier
 from datasette.database import Database
 from .trigger_db import claim_queue_items, complete_queue_items, fail_queue_item
+
+async def _fetch_row_data(db: Database, table_name: str, id_column: str, ids: list) -> list[dict]:
+    """Fetch full row data for given IDs from the target database."""
+    if not ids:
+        return []
+    result = await db.execute(
+        f"SELECT * FROM [{table_name}] WHERE [{id_column}] IN (SELECT value FROM json_each(?))",
+        [json.dumps(ids)],
+    )
+    columns = [desc[0] for desc in result.description]
+    return [dict(zip(columns, row)) for row in result.rows]
+
 
 async def get_notifiers(datasette) -> List[Notifier]:
     notifiers = []
@@ -55,8 +69,23 @@ async def job_tick(datasette, internal_db: InternalDB, job: ReadyJob):
                 continue
             print(f"Sending {len(new_ids)} new ids to {notifier.name}")
             new_ids = [str(id) for id in new_ids]
+
+            # Fetch row data if non-aggregate mode
+            row_data = None
+            aggregate = subscription.meta.get("aggregate", True)
+            if not aggregate and job.id_columns:
+                try:
+                    row_data = await _fetch_row_data(
+                        db, job.table_name, job.id_columns[0], new_ids
+                    )
+                except Exception as e:
+                    print(f"Failed to fetch row data: {e}")
+
             await notifier.send(
-                job.alert_id, new_ids, subscription.meta
+                job.alert_id, new_ids, subscription.meta,
+                row_data=row_data,
+                table_name=job.table_name,
+                database_name=job.database_name,
             )
 
 async def trigger_tick(datasette, internal_db: InternalDB, alert: TriggerAlert):
@@ -87,7 +116,23 @@ async def trigger_tick(datasette, internal_db: InternalDB, alert: TriggerAlert):
         if notifier is None:
             continue
         try:
-            await notifier.send(alert.alert_id, new_ids, subscription.meta)
+            # Fetch row data if non-aggregate mode
+            row_data = None
+            aggregate = subscription.meta.get("aggregate", True)
+            if not aggregate and alert.id_columns:
+                try:
+                    row_data = await _fetch_row_data(
+                        db, alert.table_name, alert.id_columns[0], new_ids
+                    )
+                except Exception as e2:
+                    print(f"Failed to fetch row data: {e2}")
+
+            await notifier.send(
+                alert.alert_id, new_ids, subscription.meta,
+                row_data=row_data,
+                table_name=alert.table_name,
+                database_name=alert.database_name,
+            )
         except Exception as e:
             print(f"trigger notifier error: {e}")
             for item_db_id in item_db_ids:

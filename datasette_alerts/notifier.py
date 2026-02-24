@@ -34,12 +34,24 @@ class Notifier(ABC):
         """
         raise NotImplementedError("Subclasses must implement get_config_form")
 
-    async def send(self, alert_id, new_ids, config: dict):
+    async def send(
+        self,
+        alert_id: str,
+        new_ids: list[str],
+        config: dict,
+        *,
+        row_data: list[dict] | None = None,
+        table_name: str | None = None,
+        database_name: str | None = None,
+    ):
         """
         Sends the alert notification.
-        
+
         :param alert_id: The ID of the alert being notified about.
         :param new_ids: A list of new IDs that triggered the alert.
         :param config: A dictionary containing configuration options for this notifier.
+        :param row_data: Full row data for each new ID (when aggregate is false).
+        :param table_name: Name of the table that triggered the alert.
+        :param database_name: Name of the database that triggered the alert.
         """
         raise NotImplementedError("Subclasses must implement send method")

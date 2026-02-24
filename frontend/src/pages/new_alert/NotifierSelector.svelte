@@ -1,23 +1,29 @@
 <script lang="ts">
   import type { NewAlertPageData } from "../../page_data/NewAlertPageData.types";
+  import TemplateEditor from "../../lib/template-editor/TemplateEditor.svelte";
 
   type Notifier = NewAlertPageData["notifiers"][number];
 
   interface Props {
     notifiers: Notifier[];
     selectedSlug: string;
-    meta: Record<string, string>;
-    onchange: (slug: string, meta: Record<string, string>) => void;
-    onmetachange: (meta: Record<string, string>) => void;
+    meta: Record<string, any>;
+    columns: string[];
+    onchange: (slug: string, meta: Record<string, any>) => void;
+    onmetachange: (meta: Record<string, any>) => void;
   }
 
-  let { notifiers, selectedSlug, meta, onchange, onmetachange }: Props =
+  let { notifiers, selectedSlug, meta, columns, onchange, onmetachange }: Props =
     $props();
 
-  function initDefaults(notifier: Notifier): Record<string, string> {
-    const defaults: Record<string, string> = {};
+  function initDefaults(notifier: Notifier): Record<string, any> {
+    const defaults: Record<string, any> = {};
     for (const field of notifier.config_fields ?? []) {
-      if (field.default) defaults[field.name] = field.default;
+      if (field.field_type === "boolean") {
+        defaults[field.name] = field.default === "True";
+      } else if (field.default) {
+        defaults[field.name] = field.default;
+      }
     }
     return defaults;
   }
@@ -25,6 +31,21 @@
   const selectedNotifier = $derived(
     notifiers.find((n) => n.slug === selectedSlug),
   );
+
+  function getTemplateVariables(field: Notifier["config_fields"][number]): string[] {
+    const md = field.metadata ?? {};
+    const aggregateField = md.aggregate_field;
+    if (aggregateField) {
+      const isAggregate = !!meta[aggregateField];
+      if (isAggregate) {
+        return md.aggregate_vars ?? [];
+      }
+      // Non-aggregate: use column names
+      return columns;
+    }
+    // No aggregate_field metadata — show columns as default
+    return columns;
+  }
 </script>
 
 <fieldset>
@@ -54,19 +75,48 @@
   <div class="notifier-config">
     {#each selectedNotifier.config_fields as field (field.name)}
       <div class="form-field">
-        <label for="notifier-{field.name}">{field.label}</label>
-        <input
-          type="text"
-          id="notifier-{field.name}"
-          placeholder={field.placeholder}
-          value={meta[field.name] ?? ""}
-          oninput={(e) => {
-            const input = e.currentTarget as HTMLInputElement;
-            onmetachange({ ...meta, [field.name]: input.value });
-          }}
-        />
-        {#if field.description}
-          <p class="field-description">{field.description}</p>
+        {#if field.field_type === "boolean"}
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              checked={!!meta[field.name]}
+              onchange={(e) => {
+                const input = e.currentTarget as HTMLInputElement;
+                onmetachange({ ...meta, [field.name]: input.checked });
+              }}
+            />
+            {field.label}
+          </label>
+          {#if field.description}
+            <p class="field-description">{field.description}</p>
+          {/if}
+        {:else if field.field_type === "template"}
+          <label for="notifier-{field.name}">{field.label}</label>
+          <TemplateEditor
+            value={meta[field.name] ?? null}
+            variables={getTemplateVariables(field)}
+            onchange={(doc) => {
+              onmetachange({ ...meta, [field.name]: doc });
+            }}
+          />
+          {#if field.description}
+            <p class="field-description">{field.description}</p>
+          {/if}
+        {:else}
+          <label for="notifier-{field.name}">{field.label}</label>
+          <input
+            type="text"
+            id="notifier-{field.name}"
+            placeholder={field.placeholder}
+            value={meta[field.name] ?? ""}
+            oninput={(e) => {
+              const input = e.currentTarget as HTMLInputElement;
+              onmetachange({ ...meta, [field.name]: input.value });
+            }}
+          />
+          {#if field.description}
+            <p class="field-description">{field.description}</p>
+          {/if}
         {/if}
       </div>
     {/each}
@@ -110,11 +160,18 @@
   .form-field label {
     font-weight: 600;
   }
-  .form-field input {
+  .form-field input[type="text"] {
     padding: 0.4rem 0.5rem;
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 0.9rem;
+  }
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: normal !important;
+    cursor: pointer;
   }
   .field-description {
     font-size: 0.8rem;

@@ -26,7 +26,7 @@
   let timestampColumn = $state("");
   let frequency = $state("");
   let selectedNotifier = $state(notifiers[0]?.slug ?? "");
-  let notifierMeta: Record<string, string> = $state({});
+  let notifierMeta: Record<string, any> = $state({});
   let submitting = $state(false);
   let error: string | null = $state(null);
   let success: string | null = $state(null);
@@ -194,6 +194,7 @@
         {notifiers}
         selectedSlug={selectedNotifier}
         meta={notifierMeta}
+        columns={columns.map(c => c.name)}
         onchange={(slug, meta) => {
           selectedNotifier = slug;
           notifierMeta = meta;
