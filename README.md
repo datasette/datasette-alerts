@@ -7,29 +7,10 @@
 
 Setup alerts on specfic new records.
 
-## Installation
-
-Install this plugin in the same environment as Datasette.
-```bash
-datasette install datasette-alerts
-```
-## Usage
-
-Usage instructions go here.
-
-## Development
-
-To set up this plugin locally, first checkout the code. Then create a new virtual environment:
-```bash
-cd datasette-alerts
-python -m venv venv
-source venv/bin/activate
-```
-Now install the dependencies and test dependencies:
-```bash
-pip install -e '.[test]'
-```
-To run the tests:
-```bash
-python -m pytest
-```
+## Alert Plugins
+|Plugin|Description|
+|-|-|
+|[`datasette-alerts-slack`](https://github.com/datasette/datasette-alerts-slack)|Send Slack messages on new rows
+|[`datasette-alerts-discord`](https://github.com/datasette/datasette-alerts-discord)|Send Discord messages on new rows
+|[`datasette-alerts-ntfy`](https://github.com/datasette/datasette-alerts-ntfy)|Send ntfy.sh notifications on new rows
+|[`datasette-alerts-desktop`](https://github.com/datasette/datasette-alerts-desktop)|Local desktop notifications on new rows
