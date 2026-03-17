@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 dependencies = [
     "datasette>=1.0a19",
     "datasette-plugin-router>=0.0.1a2",
-    "datasette-vite>=0.0.1a1",
+    "datasette-vite>=0.0.1a2",
     "pydantic>=2",
     "python-ulid>=3",
     "sqlite-migrate>=0.1b0",
