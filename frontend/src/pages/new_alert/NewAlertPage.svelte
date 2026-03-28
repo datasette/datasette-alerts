@@ -5,12 +5,13 @@
   import type { NewAlertPageData } from "../../page_data/NewAlertPageData.types";
   import AlertDetailsFields from "./AlertDetailsFields.svelte";
   import TriggerFields from "./TriggerFields.svelte";
-  import NotifierSelector from "./NotifierSelector.svelte";
+  import DestinationPicker from "./DestinationPicker.svelte";
 
   const client = createClient<paths>({ baseUrl: "/" });
 
   const pageData = loadPageData<NewAlertPageData>();
   const notifiers = pageData.notifiers ?? [];
+  const destinations = (pageData as any).destinations ?? [];
   const database = pageData.database_name;
   const initialFilterParams = pageData.filter_params ?? [];
 
@@ -20,7 +21,7 @@
   }
 
   interface SubscriptionEntry {
-    notifier_slug: string;
+    destination_id: string;
     meta: Record<string, any>;
   }
 
@@ -38,8 +39,8 @@
   let tables: string[] = $state([]);
   let columns: ColumnInfo[] = $state([]);
 
-  function notifierName(slug: string): string {
-    return notifiers.find((n) => n.slug === slug)?.name ?? slug;
+  function destinationLabel(id: string): string {
+    return destinations.find((d: any) => d.id === id)?.label ?? id;
   }
 
   function queryUrl(sql: string, qparams?: Record<string, string>): string {
@@ -104,8 +105,8 @@
     fetchColumns(newTable);
   }
 
-  function handleAddSubscription(slug: string, meta: Record<string, any>) {
-    subscriptions = [...subscriptions, { notifier_slug: slug, meta }];
+  function handleAddSubscription(destination_id: string, meta: Record<string, any>) {
+    subscriptions = [...subscriptions, { destination_id, meta }];
   }
 
   function handleRemoveSubscription(index: number) {
@@ -153,7 +154,7 @@
 </script>
 
 <div class="alerts-container">
-  <h2>Create Alert</h2>
+  <h2>Create Row Alert</h2>
   <form onsubmit={handleSubmit}>
     <fieldset class="alert-type-selector">
       <legend>Alert type</legend>
@@ -165,7 +166,7 @@
           checked={alertType === "cursor"}
           onchange={() => (alertType = "cursor")}
         />
-        Cursor
+        Polling
         <span class="type-desc">Poll on a schedule, tracking new rows via a timestamp column</span>
       </label>
       <label>
@@ -176,8 +177,8 @@
           checked={alertType === "trigger"}
           onchange={() => (alertType = "trigger")}
         />
-        Trigger
-        <span class="type-desc">Real-time notifications via a SQLite INSERT trigger</span>
+        Real-time
+        <span class="type-desc">Instant notifications via a SQLite INSERT trigger</span>
       </label>
     </fieldset>
 
@@ -202,23 +203,21 @@
 
     {#if subscriptions.length > 0}
       <fieldset class="subscriptions-list">
-        <legend>Configured notifiers ({subscriptions.length})</legend>
+        <legend>Configured destinations ({subscriptions.length})</legend>
         {#each subscriptions as sub, i}
           <div class="subscription-item">
-            <span class="sub-name">{notifierName(sub.notifier_slug)}</span>
+            <span class="sub-name">{destinationLabel(sub.destination_id)}</span>
             <button type="button" class="remove-btn" onclick={() => handleRemoveSubscription(i)}>Remove</button>
           </div>
         {/each}
       </fieldset>
     {/if}
 
-    {#if notifiers.length > 0}
-      <NotifierSelector
-        {notifiers}
-        columns={columns.map(c => c.name)}
-        onadd={handleAddSubscription}
-      />
-    {/if}
+    <DestinationPicker
+      {destinations}
+      columns={columns.map(c => c.name)}
+      onadd={handleAddSubscription}
+    />
 
     <div class="form-actions">
       <button type="submit" disabled={submitting || subscriptions.length === 0}>

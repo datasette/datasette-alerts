@@ -62,6 +62,7 @@ export default defineConfig({
         new_alert: "src/pages/new_alert/index.ts",
         alerts_list: "src/pages/alerts_list/index.ts",
         alert_detail: "src/pages/alert_detail/index.ts",
+        destinations: "src/pages/destinations/index.ts",
       },
     },
   },

@@ -423,7 +423,7 @@ async def test_table_action_link_with_permission(datasette):
     assert response.status_code == 200
 
     # Check that the alert configuration link is present
-    assert "Configure new alert" in response.text
+    assert "Configure new row alert" in response.text
     assert (
         "/-/data/datasette-alerts/new?table_name=events"
         in response.text
@@ -438,7 +438,7 @@ async def test_table_action_link_without_permission(datasette):
     assert response.status_code == 200
 
     # Check that the alert configuration link is NOT present
-    assert "Configure new alert" not in response.text
+    assert "Configure new row alert" not in response.text
     assert "datasette-alerts/new-alert" not in response.text
 
 

@@ -18,12 +18,19 @@
 
 <div class="alerts-container">
   <div class="alerts-header">
-    <h2>Alerts</h2>
-    <a
-      class="new-alert-link"
-      href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/new`}
-      >New alert</a
-    >
+    <h2>Row Alerts</h2>
+    <div class="header-actions">
+      <a
+        class="action-link"
+        href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/destinations`}
+        >Destinations</a
+      >
+      <a
+        class="action-link"
+        href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/new`}
+        >New alert</a
+      >
+    </div>
   </div>
 
   {#if alerts.length === 0}
@@ -48,7 +55,7 @@
             <td><code>{alert.table_name}</code></td>
             <td>
               <span class="type-badge" class:trigger={alert.alert_type === "trigger"}>
-                {alert.alert_type === "trigger" ? "trigger" : "cursor"}
+                {alert.alert_type === "trigger" ? "Real-time" : "Polling"}
               </span>
             </td>
             <td>{alert.notifiers}</td>
@@ -78,14 +85,18 @@
   .alerts-header h2 {
     margin: 0;
   }
-  .new-alert-link {
+  .header-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .action-link {
     padding: 0.4rem 1rem;
     border: 1px solid #ccc;
     border-radius: 4px;
     text-decoration: none;
     color: inherit;
   }
-  .new-alert-link:hover {
+  .action-link:hover {
     background: #f0f0f0;
   }
   .empty {
