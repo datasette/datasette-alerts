@@ -12,7 +12,8 @@ from . import hookspecs
 from datasette.plugins import pm
 from datasette_vite import vite_entry
 
-from .bg_task import bg_task, Notifier
+from .bg_task import bg_task
+from .notifier import Notifier, Message
 from .internal_db import InternalDB, NewAlertRouteParameters, NewSubscription
 _ = (InternalDB, NewAlertRouteParameters, NewSubscription)
 
@@ -22,8 +23,9 @@ from .router import router, ALERTS_ACCESS_NAME
 
 _ = (routes,)
 
-__all___ = [
+__all__ = [
     Notifier,
+    Message,
 ]
 
 pm.add_hookspecs(hookspecs)

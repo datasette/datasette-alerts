@@ -1,10 +1,12 @@
 from datasette.app import Datasette
 from datasette_alerts import (
     Notifier,
+    Message,
     InternalDB,
     NewAlertRouteParameters,
     NewSubscription,
 )
+from datasette_alerts.bg_task import _build_messages
 from wtforms import Form, StringField
 import pytest
 import pytest_asyncio
@@ -30,10 +32,10 @@ class MockNotifier(Notifier):
     def __init__(self):
         self.sent_messages = []
 
-    async def send(self, alert_id, new_ids, meta):
+    async def send(self, config, message):
         """Record sent messages for testing."""
         self.sent_messages.append(
-            {"alert_id": alert_id, "new_ids": new_ids, "meta": meta}
+            {"config": config, "message": message}
         )
 
     async def get_config_form(self):
@@ -419,3 +421,113 @@ async def test_table_action_link_without_permission(datasette):
     # Check that the alert configuration link is NOT present
     assert "Configure new alert" not in response.text
     assert "datasette-alerts/new-alert" not in response.text
+
+
+# --- Stage 1: Message + _build_messages tests ---
+
+
+def test_message_basic():
+    """Test Message class construction."""
+    msg = Message("hello")
+    assert msg.text == "hello"
+    assert msg.subject is None
+
+
+def test_message_with_subject():
+    msg = Message("body text", subject="Alert!")
+    assert msg.text == "body text"
+    assert msg.subject == "Alert!"
+
+
+def test_build_messages_fallback_no_template():
+    """Without a template, _build_messages returns a single fallback message."""
+    messages = _build_messages(
+        meta={},
+        new_ids=["1", "2", "3"],
+        row_data=None,
+        table_name="events",
+        database_name="data",
+    )
+    assert len(messages) == 1
+    assert messages[0].text == "3 new rows in events"
+
+
+def test_build_messages_aggregate_with_template():
+    """Aggregate mode with a template resolves count and table_name."""
+    template_doc = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "templateVariable", "attrs": {"varName": "count"}},
+                    {"type": "text", "text": " new in "},
+                    {"type": "templateVariable", "attrs": {"varName": "table_name"}},
+                ],
+            }
+        ],
+    }
+    messages = _build_messages(
+        meta={"aggregate": True, "message_template": template_doc},
+        new_ids=["1", "2"],
+        row_data=None,
+        table_name="events",
+        database_name="data",
+    )
+    assert len(messages) == 1
+    assert messages[0].text == "2 new in events"
+
+
+def test_build_messages_per_row_with_template():
+    """Non-aggregate mode builds one message per row."""
+    template_doc = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "Row: "},
+                    {"type": "templateVariable", "attrs": {"varName": "title"}},
+                ],
+            }
+        ],
+    }
+    row_data = [
+        {"id": "1", "title": "First"},
+        {"id": "2", "title": "Second"},
+    ]
+    messages = _build_messages(
+        meta={"aggregate": False, "message_template": template_doc},
+        new_ids=["1", "2"],
+        row_data=row_data,
+        table_name="events",
+        database_name="data",
+    )
+    assert len(messages) == 2
+    assert messages[0].text == "Row: First"
+    assert messages[1].text == "Row: Second"
+
+
+def test_build_messages_per_row_no_row_data_falls_back_to_aggregate():
+    """Non-aggregate with no row_data falls back to aggregate behavior."""
+    template_doc = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "templateVariable", "attrs": {"varName": "count"}},
+                    {"type": "text", "text": " items"},
+                ],
+            }
+        ],
+    }
+    messages = _build_messages(
+        meta={"aggregate": False, "message_template": template_doc},
+        new_ids=["1", "2", "3"],
+        row_data=None,
+        table_name="events",
+        database_name="data",
+    )
+    assert len(messages) == 1
+    assert messages[0].text == "3 items"
