@@ -55,10 +55,20 @@ class AlertsListPageData(BaseModel):
     alerts: list[AlertInfo] = []
 
 
+class DestinationInfo(BaseModel):
+    id: str
+    notifier: str
+    label: str
+    config: dict = {}
+    created_at: str | None = None
+
+
 class AlertSubscriptionInfo(BaseModel):
     id: str
     notifier: str
     meta: dict = {}
+    destination_id: str | None = None
+    destination_label: str = ""
 
 
 class AlertLogEntry(BaseModel):

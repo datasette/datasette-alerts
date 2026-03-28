@@ -49,3 +49,22 @@ def m002_trigger_alerts(db: Database):
             ADD COLUMN filter_params TEXT;
         """
     )
+
+
+@internal_migrations()
+def m003_destinations(db: Database):
+    db.executescript(
+        """
+          CREATE TABLE datasette_alerts_destinations (
+            id TEXT PRIMARY KEY,
+            notifier TEXT NOT NULL,
+            label TEXT NOT NULL,
+            config JSON NOT NULL DEFAULT '{}',
+            created_by TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          ALTER TABLE datasette_alerts_subscriptions
+            ADD COLUMN destination_id TEXT REFERENCES datasette_alerts_destinations(id);
+        """
+    )

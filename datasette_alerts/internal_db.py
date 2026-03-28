@@ -19,9 +19,24 @@ class ReadyJob(BaseModel):
     cursor: Union[str, int]
 
 
+class Destination(BaseModel):
+    id: str
+    notifier: str
+    label: str
+    config: dict
+    created_by: str | None = None
+    created_at: str | None = None
+
+
+class NewDestination(BaseModel):
+    notifier: str
+    label: str
+    config: dict = {}
+
+
 class NewSubscription(BaseModel):
-    notifier_slug: str
-    meta: dict
+    destination_id: str
+    meta: dict  # per-alert overrides: aggregate, message_template
 
 
 class NewAlertRouteParameters(BaseModel):
@@ -48,10 +63,79 @@ class TriggerAlert(BaseModel):
 class Subscription(BaseModel):
     notifier: str
     meta: dict
+    destination_id: str | None = None
+    destination_config: dict = {}
+    destination_label: str = ""
 
 class InternalDB:
     def __init__(self, internal_db: Database):
         self.db = internal_db
+
+    # --- Destination CRUD ---
+
+    async def create_destination(self, params: NewDestination, created_by: str | None = None) -> str:
+        def write(conn) -> str:
+            with conn:
+                dest_id = ulid_new()
+                conn.execute(
+                    """
+                    INSERT INTO datasette_alerts_destinations(id, notifier, label, config, created_by)
+                    VALUES (?, ?, ?, json(?), ?)
+                    """,
+                    [dest_id, params.notifier, params.label, json.dumps(params.config), created_by],
+                )
+                return dest_id
+        return await self.db.execute_write_fn(write)  # type: ignore
+
+    async def list_destinations(self) -> list[Destination]:
+        def read(conn):
+            rows = conn.execute(
+                "SELECT id, notifier, label, config, created_by, created_at FROM datasette_alerts_destinations ORDER BY created_at DESC"
+            ).fetchall()
+            return [
+                Destination(
+                    id=r[0], notifier=r[1], label=r[2],
+                    config=json.loads(r[3]) if r[3] else {},
+                    created_by=r[4], created_at=r[5],
+                )
+                for r in rows
+            ]
+        return await self.db.execute_write_fn(read)  # type: ignore
+
+    async def get_destination(self, destination_id: str) -> Destination | None:
+        def read(conn):
+            row = conn.execute(
+                "SELECT id, notifier, label, config, created_by, created_at FROM datasette_alerts_destinations WHERE id = ?",
+                [destination_id],
+            ).fetchone()
+            if row is None:
+                return None
+            return Destination(
+                id=row[0], notifier=row[1], label=row[2],
+                config=json.loads(row[3]) if row[3] else {},
+                created_by=row[4], created_at=row[5],
+            )
+        return await self.db.execute_write_fn(read)  # type: ignore
+
+    async def update_destination(self, destination_id: str, label: str, config: dict):
+        def write(conn):
+            with conn:
+                conn.execute(
+                    "UPDATE datasette_alerts_destinations SET label = ?, config = json(?) WHERE id = ?",
+                    [label, json.dumps(config), destination_id],
+                )
+        return await self.db.execute_write_fn(write)
+
+    async def delete_destination(self, destination_id: str):
+        def write(conn):
+            with conn:
+                conn.execute(
+                    "DELETE FROM datasette_alerts_destinations WHERE id = ?",
+                    [destination_id],
+                )
+        return await self.db.execute_write_fn(write)
+
+    # --- Alert scheduling ---
 
     async def schedule_next(self, alert_id: str):
         """Schedules the next run of the alert by updating the next_deadline and resetting current_schedule_started_at."""
@@ -71,25 +155,48 @@ class InternalDB:
         return await self.db.execute_write_fn(write)
 
     async def alert_subscriptions(self, alert_id: str) -> List[Subscription]:
-        """Fetches all subscriptions for the given alert ID, returning the notifier slug and metadata."""
+        """Fetches all subscriptions for the given alert ID.
+
+        For destination-based subscriptions, joins with destinations to get notifier slug and config.
+        For legacy subscriptions (no destination_id), falls back to notifier + meta columns.
+        """
 
         def write(conn):
             with conn:
                 results = conn.execute(
                     """
-                  SELECT notifier, meta
-                  FROM datasette_alerts_subscriptions
-                  WHERE alert_id = ?
-                  """,
+                    SELECT
+                      s.notifier,
+                      s.meta,
+                      s.destination_id,
+                      d.config as dest_config,
+                      d.notifier as dest_notifier,
+                      d.label as dest_label
+                    FROM datasette_alerts_subscriptions s
+                    LEFT JOIN datasette_alerts_destinations d ON d.id = s.destination_id
+                    WHERE s.alert_id = ?
+                    """,
                     [alert_id],
                 ).fetchall()
-                return [
-                    Subscription(
-                        notifier=row[0],
-                        meta=json.loads(row[1]),
-                    )
-                    for row in results
-                ]
+                subs = []
+                for row in results:
+                    if row[2]:  # has destination_id
+                        subs.append(Subscription(
+                            notifier=row[4],  # dest_notifier
+                            meta=json.loads(row[1]) if row[1] else {},
+                            destination_id=row[2],
+                            destination_config=json.loads(row[3]) if row[3] else {},
+                            destination_label=row[5] or "",
+                        ))
+                    else:  # legacy: notifier + meta on subscription itself
+                        subs.append(Subscription(
+                            notifier=row[0],
+                            meta=json.loads(row[1]),
+                            destination_id=None,
+                            destination_config={},
+                            destination_label="",
+                        ))
+                return subs
 
         return await self.db.execute_write_fn(write) # type: ignore
 
@@ -165,7 +272,7 @@ class InternalDB:
         return await self.db.execute_write_fn(write) # type: ignore
 
     async def list_alerts_for_database(self, database_name: str) -> list[dict]:
-        """Lists all alerts for the given database, including notifier slugs."""
+        """Lists all alerts for the given database, including destination labels."""
 
         def read(conn):
             rows = conn.execute(
@@ -178,7 +285,7 @@ class InternalDB:
                     a.next_deadline,
                     a.alert_created_at,
                     cast((julianday(a.next_deadline) - julianday('now')) * 86400 as integer) as seconds_until_next,
-                    group_concat(DISTINCT s.notifier) as notifiers,
+                    group_concat(DISTINCT coalesce(d.notifier, s.notifier)) as notifiers,
                     (
                       SELECT max(l.logged_at)
                       FROM datasette_alerts_alert_logs l
@@ -188,6 +295,7 @@ class InternalDB:
                     a.alert_type
                   FROM datasette_alerts_alerts a
                   LEFT JOIN datasette_alerts_subscriptions s ON s.alert_id = a.id
+                  LEFT JOIN datasette_alerts_destinations d ON d.id = s.destination_id
                   WHERE a.database_name = ?
                   GROUP BY a.id
                   ORDER BY a.alert_created_at DESC
@@ -239,7 +347,13 @@ class InternalDB:
                 return None
 
             subs = conn.execute(
-                "SELECT id, notifier, meta FROM datasette_alerts_subscriptions WHERE alert_id = ?",
+                """
+                SELECT s.id, s.notifier, s.meta, s.destination_id,
+                       d.notifier as dest_notifier, d.label as dest_label
+                FROM datasette_alerts_subscriptions s
+                LEFT JOIN datasette_alerts_destinations d ON d.id = s.destination_id
+                WHERE s.alert_id = ?
+                """,
                 [alert_id],
             ).fetchall()
 
@@ -267,7 +381,14 @@ class InternalDB:
                 "alert_type": row[9] or "cursor",
                 "filter_params": json.loads(row[10]) if row[10] else [],
                 "subscriptions": [
-                    {"id": s[0], "notifier": s[1], "meta": json.loads(s[2])} for s in subs
+                    {
+                        "id": s[0],
+                        "notifier": s[4] or s[1],  # prefer dest_notifier
+                        "meta": json.loads(s[2]) if s[2] else {},
+                        "destination_id": s[3],
+                        "destination_label": s[5] or "",
+                    }
+                    for s in subs
                 ],
                 "logs": [
                     {
@@ -334,13 +455,13 @@ class InternalDB:
                 for subscription in params.subscriptions:
                     conn.execute(
                         """
-                        INSERT INTO datasette_alerts_subscriptions(id, alert_id, notifier, meta)
+                        INSERT INTO datasette_alerts_subscriptions(id, alert_id, destination_id, meta)
                         VALUES (?, ?, ?, json(?))
                       """,
                         [
                             ulid_new(),
                             alert_id,
-                            subscription.notifier_slug,
+                            subscription.destination_id,
                             json.dumps(subscription.meta),
                         ],
                     )
@@ -376,7 +497,7 @@ class InternalDB:
 
         return await self.db.execute_write_fn(write)  # type: ignore
 
-    async def add_subscription(self, alert_id: str, notifier_slug: str, meta: dict) -> str:
+    async def add_subscription(self, alert_id: str, destination_id: str, meta: dict) -> str:
         """Add a subscription to an existing alert. Returns the new subscription ID."""
 
         def write(conn) -> str:
@@ -384,10 +505,10 @@ class InternalDB:
                 sub_id = ulid_new()
                 conn.execute(
                     """
-                    INSERT INTO datasette_alerts_subscriptions(id, alert_id, notifier, meta)
+                    INSERT INTO datasette_alerts_subscriptions(id, alert_id, destination_id, meta)
                     VALUES (?, ?, ?, json(?))
                     """,
-                    [sub_id, alert_id, notifier_slug, json.dumps(meta)],
+                    [sub_id, alert_id, destination_id, json.dumps(meta)],
                 )
                 return sub_id
 
@@ -439,5 +560,3 @@ class InternalDB:
             ]
 
         return await self.db.execute_write_fn(read)  # type: ignore
-
-

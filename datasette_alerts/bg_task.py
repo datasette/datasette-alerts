@@ -92,7 +92,11 @@ async def _send_for_subscription(
         print(f"Notifier not found: {subscription.notifier}")
         return
 
-    config = _notifier_config(subscription.meta)
+    # Use destination config if available, otherwise fall back to legacy meta
+    if subscription.destination_id:
+        config = subscription.destination_config
+    else:
+        config = _notifier_config(subscription.meta)
     messages = _build_messages(subscription.meta, new_ids, row_data, table_name, database_name)
 
     for message in messages:

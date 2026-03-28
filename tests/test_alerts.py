@@ -6,6 +6,7 @@ from datasette_alerts import (
     NewAlertRouteParameters,
     NewSubscription,
 )
+from datasette_alerts.internal_db import NewDestination
 from datasette_alerts.bg_task import _build_messages
 from wtforms import Form, StringField
 import pytest
@@ -106,8 +107,13 @@ async def test_plugin_loads_and_creates_tables(datasette):
 
 @pytest.mark.asyncio
 async def test_internal_db_new_alert(datasette):
-    """Test creating a new alert."""
+    """Test creating a new alert with a destination-based subscription."""
     internal_db = InternalDB(datasette.get_internal_database())
+
+    # Create a destination first
+    dest_id = await internal_db.create_destination(
+        NewDestination(notifier="test-notifier", label="Test Dest", config={"url": "https://example.com"})
+    )
 
     params = NewAlertRouteParameters(
         database_name="data",
@@ -116,9 +122,7 @@ async def test_internal_db_new_alert(datasette):
         timestamp_column="created_at",
         frequency="+1 hour",
         subscriptions=[
-            NewSubscription(
-                notifier_slug="test-notifier", meta={"url": "https://example.com"}
-            )
+            NewSubscription(destination_id=dest_id, meta={"aggregate": True})
         ],
     )
 
@@ -140,13 +144,13 @@ async def test_internal_db_new_alert(datasette):
     assert alert["timestamp_column"] == "created_at"
     assert alert["frequency"] == "+1 hour"
 
-    # Check subscription was created
+    # Check subscription was created with destination_id
     subscriptions = await db.execute(
         "SELECT * FROM datasette_alerts_subscriptions WHERE alert_id = ?", [alert_id]
     )
     sub = dict(subscriptions.first())
-    assert sub["notifier"] == "test-notifier"
-    assert json.loads(sub["meta"]) == {"url": "https://example.com"}
+    assert sub["destination_id"] == dest_id
+    assert json.loads(sub["meta"]) == {"aggregate": True}
 
     # Check initial log entry was created
     logs = await db.execute(
@@ -159,8 +163,15 @@ async def test_internal_db_new_alert(datasette):
 
 @pytest.mark.asyncio
 async def test_internal_db_alert_subscriptions(datasette):
-    """Test fetching alert subscriptions."""
+    """Test fetching alert subscriptions with destinations."""
     internal_db = InternalDB(datasette.get_internal_database())
+
+    dest1_id = await internal_db.create_destination(
+        NewDestination(notifier="notifier1", label="Dest 1", config={"key1": "value1"})
+    )
+    dest2_id = await internal_db.create_destination(
+        NewDestination(notifier="notifier2", label="Dest 2", config={"key2": "value2"})
+    )
 
     params = NewAlertRouteParameters(
         database_name="data",
@@ -169,8 +180,8 @@ async def test_internal_db_alert_subscriptions(datasette):
         timestamp_column="created_at",
         frequency="+1 hour",
         subscriptions=[
-            NewSubscription(notifier_slug="notifier1", meta={"key1": "value1"}),
-            NewSubscription(notifier_slug="notifier2", meta={"key2": "value2"}),
+            NewSubscription(destination_id=dest1_id, meta={"aggregate": True}),
+            NewSubscription(destination_id=dest2_id, meta={"aggregate": False}),
         ],
     )
 
@@ -181,9 +192,12 @@ async def test_internal_db_alert_subscriptions(datasette):
 
     assert len(subscriptions) == 2
     assert subscriptions[0].notifier == "notifier1"
-    assert subscriptions[0].meta == {"key1": "value1"}
+    assert subscriptions[0].destination_id == dest1_id
+    assert subscriptions[0].destination_config == {"key1": "value1"}
+    assert subscriptions[0].destination_label == "Dest 1"
     assert subscriptions[1].notifier == "notifier2"
-    assert subscriptions[1].meta == {"key2": "value2"}
+    assert subscriptions[1].destination_id == dest2_id
+    assert subscriptions[1].destination_config == {"key2": "value2"}
 
 
 @pytest.mark.asyncio
@@ -312,7 +326,12 @@ async def test_internal_db_start_ready_jobs(datasette):
 
 @pytest.mark.asyncio
 async def test_api_new_alert_endpoint(datasette):
-    """Test the API endpoint for creating alerts."""
+    """Test the API endpoint for creating alerts with a destination."""
+    internal_db = InternalDB(datasette.get_internal_database())
+    dest_id = await internal_db.create_destination(
+        NewDestination(notifier="test-notifier", label="Test", config={"url": "https://example.com"})
+    )
+
     cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
     payload = {
         "database_name": "data",
@@ -321,7 +340,7 @@ async def test_api_new_alert_endpoint(datasette):
         "timestamp_column": "created_at",
         "frequency": "+1 hour",
         "subscriptions": [
-            {"notifier_slug": "test-notifier", "meta": {"url": "https://example.com"}}
+            {"destination_id": dest_id, "meta": {"aggregate": True}}
         ],
     }
 
@@ -531,3 +550,79 @@ def test_build_messages_per_row_no_row_data_falls_back_to_aggregate():
     )
     assert len(messages) == 1
     assert messages[0].text == "3 items"
+
+
+# --- Stage 2: Destination CRUD tests ---
+
+
+@pytest.mark.asyncio
+async def test_destination_crud(datasette):
+    """Test full lifecycle: create, get, list, update, delete destinations."""
+    internal_db = InternalDB(datasette.get_internal_database())
+
+    # Create
+    dest_id = await internal_db.create_destination(
+        NewDestination(notifier="slack", label="Ops Channel", config={"webhook_url": "https://hooks.slack.com/1"})
+    )
+    assert dest_id is not None
+
+    # Get
+    dest = await internal_db.get_destination(dest_id)
+    assert dest is not None
+    assert dest.notifier == "slack"
+    assert dest.label == "Ops Channel"
+    assert dest.config == {"webhook_url": "https://hooks.slack.com/1"}
+
+    # List
+    dests = await internal_db.list_destinations()
+    assert len(dests) >= 1
+    assert any(d.id == dest_id for d in dests)
+
+    # Update
+    await internal_db.update_destination(dest_id, "Ops Channel v2", {"webhook_url": "https://hooks.slack.com/2"})
+    updated = await internal_db.get_destination(dest_id)
+    assert updated.label == "Ops Channel v2"
+    assert updated.config == {"webhook_url": "https://hooks.slack.com/2"}
+
+    # Delete
+    await internal_db.delete_destination(dest_id)
+    deleted = await internal_db.get_destination(dest_id)
+    assert deleted is None
+
+
+@pytest.mark.asyncio
+async def test_destination_not_found(datasette):
+    """Test get_destination returns None for nonexistent ID."""
+    internal_db = InternalDB(datasette.get_internal_database())
+    result = await internal_db.get_destination("nonexistent")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_alert_detail_includes_destination_info(datasette):
+    """Test that get_alert_detail includes destination info in subscriptions."""
+    internal_db = InternalDB(datasette.get_internal_database())
+
+    dest_id = await internal_db.create_destination(
+        NewDestination(notifier="slack", label="My Slack", config={"webhook_url": "https://example.com"})
+    )
+
+    params = NewAlertRouteParameters(
+        database_name="data",
+        table_name="events",
+        id_columns=["id"],
+        timestamp_column="created_at",
+        frequency="+1 hour",
+        subscriptions=[
+            NewSubscription(destination_id=dest_id, meta={"aggregate": True})
+        ],
+    )
+    alert_id = await internal_db.new_alert(params, "2024-01-01 00:00:00")
+
+    detail = await internal_db.get_alert_detail(alert_id)
+    assert detail is not None
+    assert len(detail["subscriptions"]) == 1
+    sub = detail["subscriptions"][0]
+    assert sub["destination_id"] == dest_id
+    assert sub["destination_label"] == "My Slack"
+    assert sub["notifier"] == "slack"

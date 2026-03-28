@@ -228,7 +228,7 @@ async def api_new_alert(
 
 
 class AddSubscriptionBody(BaseModel):
-    notifier_slug: str
+    destination_id: str
     meta: dict = {}
 
 
@@ -245,7 +245,7 @@ async def api_add_subscription(
     detail = await internal_db.get_alert_detail(alert_id)
     if detail is None:
         return Response.json({"ok": False, "error": "Alert not found"}, status=404)
-    sub_id = await internal_db.add_subscription(alert_id, body.notifier_slug, body.meta)
+    sub_id = await internal_db.add_subscription(alert_id, body.destination_id, body.meta)
     return Response.json({"ok": True, "data": {"subscription_id": sub_id}})
 
 
