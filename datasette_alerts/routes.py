@@ -4,8 +4,8 @@ from pydantic import BaseModel
 from datasette import Response
 from datasette_plugin_router import Body
 
-from .internal_db import InternalDB, NewAlertRouteParameters
-from .page_data import AlertDetailPageData, AlertInfo, AlertsListPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
+from .internal_db import InternalDB, NewAlertRouteParameters, NewDestination
+from .page_data import AlertDetailPageData, AlertInfo, AlertsListPageData, DestinationInfo, DestinationsPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
 from .router import router, check_permission
 from .bg_task import get_notifiers
 from .trigger_db import create_queue_and_trigger, drop_queue_and_trigger
@@ -60,6 +60,41 @@ def extract_config_fields(form_class) -> list[NotifierConfigField]:
     return fields
 
 
+async def _build_notifier_infos(datasette) -> list[NotifierInfo]:
+    """Build NotifierInfo list from registered notifiers."""
+    notifiers = await get_notifiers(datasette)
+    infos = []
+    for n in notifiers:
+        config_fields = []
+        try:
+            form_class = await n.get_config_form()
+            config_fields = extract_config_fields(form_class)
+        except NotImplementedError:
+            pass
+        infos.append(
+            NotifierInfo(
+                slug=n.slug,
+                name=n.name,
+                icon=n.icon,
+                description=n.description,
+                config_fields=config_fields,
+            )
+        )
+    return infos
+
+
+async def _build_destination_infos(internal_db: InternalDB) -> list[DestinationInfo]:
+    """Build DestinationInfo list from stored destinations."""
+    dests = await internal_db.list_destinations()
+    return [
+        DestinationInfo(
+            id=d.id, notifier=d.notifier, label=d.label,
+            config=d.config, created_at=d.created_at,
+        )
+        for d in dests
+    ]
+
+
 def _base_crumbs(datasette, db_name: str) -> list[dict]:
     return [
         {"href": datasette.urls.instance(), "label": "home"},
@@ -106,31 +141,15 @@ async def ui_alert_detail(datasette, request, db_name: str, alert_id: str):
     if detail is None:
         return Response.html("Alert not found", status=404)
 
-    notifiers = await get_notifiers(datasette)
-    notifier_infos = []
-    for n in notifiers:
-        config_fields = []
-        try:
-            form_class = await n.get_config_form()
-            config_fields = extract_config_fields(form_class)
-        except NotImplementedError:
-            pass
-        notifier_infos.append(
-            NotifierInfo(
-                slug=n.slug,
-                name=n.name,
-                icon=n.icon,
-                description=n.description,
-                config_fields=config_fields,
-            )
-        )
+    notifier_infos = await _build_notifier_infos(datasette)
+    destination_infos = await _build_destination_infos(internal_db)
 
     return await render_page(
         datasette,
         request,
         page_title=f"Alert — {detail['table_name']}",
         entrypoint="src/pages/alert_detail/index.ts",
-        page_data=AlertDetailPageData(**detail, notifiers=notifier_infos),
+        page_data=AlertDetailPageData(**detail, notifiers=notifier_infos, destinations=destination_infos),
         breadcrumbs=_alerts_crumbs(datasette, db_name) + [
             {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts/alerts/{alert_id}"), "label": detail["table_name"]},
         ],
@@ -144,24 +163,10 @@ async def ui_new_alert(datasette, request, db_name: str):
     if db is None:
         return Response.html("Database not found", status=404)
 
-    notifiers = await get_notifiers(datasette)
-    notifier_infos = []
-    for n in notifiers:
-        config_fields = []
-        try:
-            form_class = await n.get_config_form()
-            config_fields = extract_config_fields(form_class)
-        except NotImplementedError:
-            pass
-        notifier_infos.append(
-            NotifierInfo(
-                slug=n.slug,
-                name=n.name,
-                icon=n.icon,
-                description=n.description,
-                config_fields=config_fields,
-            )
-        )
+    internal_db = InternalDB(datasette.get_internal_database())
+    notifier_infos = await _build_notifier_infos(datasette)
+    destination_infos = await _build_destination_infos(internal_db)
+
     # Extract filter params from URL (non-_ params, or params with __ in them)
     filter_params = []
     for key in request.args:
@@ -180,6 +185,7 @@ async def ui_new_alert(datasette, request, db_name: str):
         page_data=NewAlertPageData(
             database_name=db_name,
             notifiers=notifier_infos,
+            destinations=destination_infos,
             filter_params=filter_params,
         ),
         breadcrumbs=_alerts_crumbs(datasette, db_name) + [
@@ -286,4 +292,85 @@ async def api_delete_alert(datasette, request, db_name: str, alert_id: str):
             except Exception:
                 pass  # Queue/trigger may already be gone
 
+    return Response.json({"ok": True})
+
+
+# --- Destination routes ---
+
+
+@router.GET(r"/-/(?P<db_name>[^/]+)/datasette-alerts/destinations$")
+@check_permission()
+async def ui_destinations_list(datasette, request, db_name: str):
+    db = datasette.databases.get(db_name)
+    if db is None:
+        return Response.html("Database not found", status=404)
+
+    internal_db = InternalDB(datasette.get_internal_database())
+    notifier_infos = await _build_notifier_infos(datasette)
+    destination_infos = await _build_destination_infos(internal_db)
+
+    return await render_page(
+        datasette,
+        request,
+        page_title=f"Destinations — {db_name}",
+        entrypoint="src/pages/destinations/index.ts",
+        page_data=DestinationsPageData(
+            database_name=db_name,
+            destinations=destination_infos,
+            notifiers=notifier_infos,
+        ),
+        breadcrumbs=_alerts_crumbs(datasette, db_name) + [
+            {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts/destinations"), "label": "Destinations"},
+        ],
+    )
+
+
+class NewDestinationBody(BaseModel):
+    notifier: str
+    label: str
+    config: dict = {}
+
+
+class UpdateDestinationBody(BaseModel):
+    label: str
+    config: dict = {}
+
+
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/new$")
+@check_permission()
+async def api_new_destination(
+    datasette, request, db_name: str, body: Annotated[NewDestinationBody, Body()]
+):
+    internal_db = InternalDB(datasette.get_internal_database())
+    created_by = request.actor.get("id") if request.actor else None
+    dest_id = await internal_db.create_destination(
+        NewDestination(notifier=body.notifier, label=body.label, config=body.config),
+        created_by=created_by,
+    )
+    return Response.json({"ok": True, "data": {"destination_id": dest_id}})
+
+
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/(?P<dest_id>[^/]+)/update$")
+@check_permission()
+async def api_update_destination(
+    datasette, request, db_name: str, dest_id: str, body: Annotated[UpdateDestinationBody, Body()]
+):
+    internal_db = InternalDB(datasette.get_internal_database())
+    dest = await internal_db.get_destination(dest_id)
+    if dest is None:
+        return Response.json({"ok": False, "error": "Destination not found"}, status=404)
+    await internal_db.update_destination(dest_id, body.label, body.config)
+    return Response.json({"ok": True})
+
+
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/(?P<dest_id>[^/]+)/delete$")
+@check_permission()
+async def api_delete_destination(
+    datasette, request, db_name: str, dest_id: str
+):
+    internal_db = InternalDB(datasette.get_internal_database())
+    dest = await internal_db.get_destination(dest_id)
+    if dest is None:
+        return Response.json({"ok": False, "error": "Destination not found"}, status=404)
+    await internal_db.delete_destination(dest_id)
     return Response.json({"ok": True})

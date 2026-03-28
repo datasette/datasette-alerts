@@ -626,3 +626,79 @@ async def test_alert_detail_includes_destination_info(datasette):
     assert sub["destination_id"] == dest_id
     assert sub["destination_label"] == "My Slack"
     assert sub["notifier"] == "slack"
+
+
+# --- Stage 3: Destination API route tests ---
+
+
+@pytest.mark.asyncio
+async def test_api_create_destination(datasette):
+    """Test creating a destination via API."""
+    cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
+    response = await datasette.client.post(
+        "/-/data/datasette-alerts/api/destinations/new",
+        json={"notifier": "slack", "label": "Test Slack", "config": {"webhook_url": "https://hooks.slack.com/test"}},
+        cookies=cookies,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert "destination_id" in data["data"]
+
+
+@pytest.mark.asyncio
+async def test_api_update_destination(datasette):
+    """Test updating a destination via API."""
+    internal_db = InternalDB(datasette.get_internal_database())
+    dest_id = await internal_db.create_destination(
+        NewDestination(notifier="slack", label="Old Label", config={"webhook_url": "https://old"})
+    )
+
+    cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
+    response = await datasette.client.post(
+        f"/-/data/datasette-alerts/api/destinations/{dest_id}/update",
+        json={"label": "New Label", "config": {"webhook_url": "https://new"}},
+        cookies=cookies,
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+    # Verify update
+    dest = await internal_db.get_destination(dest_id)
+    assert dest.label == "New Label"
+    assert dest.config == {"webhook_url": "https://new"}
+
+
+@pytest.mark.asyncio
+async def test_api_delete_destination(datasette):
+    """Test deleting a destination via API."""
+    internal_db = InternalDB(datasette.get_internal_database())
+    dest_id = await internal_db.create_destination(
+        NewDestination(notifier="slack", label="To Delete", config={})
+    )
+
+    cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
+    response = await datasette.client.post(
+        f"/-/data/datasette-alerts/api/destinations/{dest_id}/delete",
+        json={},
+        cookies=cookies,
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+    # Verify deleted
+    dest = await internal_db.get_destination(dest_id)
+    assert dest is None
+
+
+@pytest.mark.asyncio
+async def test_api_delete_destination_not_found(datasette):
+    """Test deleting a nonexistent destination returns 404."""
+    cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
+    response = await datasette.client.post(
+        "/-/data/datasette-alerts/api/destinations/nonexistent/delete",
+        json={},
+        cookies=cookies,
+    )
+    assert response.status_code == 404
+    assert response.json()["ok"] is False

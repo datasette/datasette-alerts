@@ -19,10 +19,26 @@ class NotifierInfo(BaseModel):
     config_fields: list[NotifierConfigField] = []
 
 
+class DestinationInfo(BaseModel):
+    id: str
+    notifier: str
+    label: str
+    config: dict = {}
+    created_at: str | None = None
+
+
+# /-/{db_name}/datasette-alerts/destinations — manage destinations
+class DestinationsPageData(BaseModel):
+    database_name: str
+    destinations: list[DestinationInfo] = []
+    notifiers: list[NotifierInfo] = []
+
+
 # /-/{db_name}/datasette-alerts/new — form to create a new alert
 class NewAlertPageData(BaseModel):
     database_name: str
     notifiers: list[NotifierInfo] = []
+    destinations: list[DestinationInfo] = []
     filter_params: list[list[str]] = []
 
 
@@ -55,14 +71,6 @@ class AlertsListPageData(BaseModel):
     alerts: list[AlertInfo] = []
 
 
-class DestinationInfo(BaseModel):
-    id: str
-    notifier: str
-    label: str
-    config: dict = {}
-    created_at: str | None = None
-
-
 class AlertSubscriptionInfo(BaseModel):
     id: str
     notifier: str
@@ -93,6 +101,7 @@ class AlertDetailPageData(BaseModel):
     subscriptions: list[AlertSubscriptionInfo] = []
     logs: list[AlertLogEntry] = []
     notifiers: list[NotifierInfo] = []
+    destinations: list[DestinationInfo] = []
 
 
-__exports__ = [NewAlertPageData, AlertsListPageData, AlertDetailPageData]
+__exports__ = [NewAlertPageData, AlertsListPageData, AlertDetailPageData, DestinationsPageData]
