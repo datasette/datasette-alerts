@@ -5,7 +5,7 @@ from datasette import Response
 from datasette_plugin_router import Body
 
 from .internal_db import InternalDB, NewAlertRouteParameters, NewDestination
-from .page_data import AlertDetailPageData, AlertInfo, AlertsListPageData, DestinationInfo, DestinationsPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
+from .page_data import AlertDetailPageData, AlertInfo, AlertsListPageData, ConfigElementInfo, DestinationInfo, DestinationsPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
 from .router import router, check_permission
 from .destinations import get_notifiers
 from .trigger_db import create_queue_and_trigger, drop_queue_and_trigger
@@ -66,11 +66,20 @@ async def _build_notifier_infos(datasette) -> list[NotifierInfo]:
     infos = []
     for n in notifiers:
         config_fields = []
-        try:
-            form_class = await n.get_config_form()
-            config_fields = extract_config_fields(form_class)
-        except NotImplementedError:
-            pass
+        config_element = None
+
+        # Check for web component config element first
+        ce = n.get_config_element()
+        if ce is not None:
+            config_element = ConfigElementInfo(tag=ce.tag, scripts=ce.scripts)
+        else:
+            # Fall back to WTForms
+            try:
+                form_class = await n.get_config_form()
+                config_fields = extract_config_fields(form_class)
+            except NotImplementedError:
+                pass
+
         infos.append(
             NotifierInfo(
                 slug=n.slug,
@@ -78,6 +87,7 @@ async def _build_notifier_infos(datasette) -> list[NotifierInfo]:
                 icon=n.icon,
                 description=n.description,
                 config_fields=config_fields,
+                config_element=config_element,
             )
         )
     return infos

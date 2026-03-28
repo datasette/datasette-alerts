@@ -11,12 +11,18 @@ class NotifierConfigField(BaseModel):
     metadata: dict = {}
 
 
+class ConfigElementInfo(BaseModel):
+    tag: str
+    scripts: list[str] = []
+
+
 class NotifierInfo(BaseModel):
     slug: str
     name: str
     icon: str = ""
     description: str = ""
     config_fields: list[NotifierConfigField] = []
+    config_element: ConfigElementInfo | None = None
 
 
 class DestinationInfo(BaseModel):

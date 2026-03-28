@@ -13,7 +13,7 @@ from datasette.plugins import pm
 from datasette_vite import vite_entry
 
 from .bg_task import bg_task
-from .notifier import Notifier, Message
+from .notifier import Notifier, Message, ConfigElement
 from .destinations import send_to_destination, DestinationNotFound, NotifierNotFound
 from .internal_db import InternalDB, NewAlertRouteParameters, NewSubscription
 _ = (InternalDB, NewAlertRouteParameters, NewSubscription)

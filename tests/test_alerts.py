@@ -758,3 +758,44 @@ async def test_send_to_destination_notifier_not_found(datasette):
     )
     with pytest.raises(NotifierNotFound):
         await send_to_destination(datasette, dest_id, Message("test"))
+
+
+# --- Stage 6: ConfigElement tests ---
+
+
+def test_config_element():
+    """Test ConfigElement model."""
+    from datasette_alerts import ConfigElement
+    ce = ConfigElement(tag="my-form", scripts=["/-/static/my-plugin/config.js"])
+    assert ce.tag == "my-form"
+    assert ce.scripts == ["/-/static/my-plugin/config.js"]
+
+
+def test_notifier_get_config_element_default():
+    """Default get_config_element returns None (WTForms path)."""
+    notifier = MockNotifier()
+    assert notifier.get_config_element() is None
+
+
+def test_notifier_with_config_element():
+    """A notifier can return a ConfigElement."""
+    from datasette_alerts import ConfigElement
+
+    class WebComponentNotifier(Notifier):
+        slug = "wc-test"
+        name = "WC Test"
+
+        def get_config_element(self):
+            return ConfigElement(
+                tag="my-wc-form",
+                scripts=["/-/static/test/config.js"],
+            )
+
+        async def send(self, config, message):
+            pass
+
+    notifier = WebComponentNotifier()
+    ce = notifier.get_config_element()
+    assert ce is not None
+    assert ce.tag == "my-wc-form"
+    assert ce.scripts == ["/-/static/test/config.js"]

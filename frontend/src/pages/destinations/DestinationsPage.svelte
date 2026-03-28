@@ -1,6 +1,7 @@
 <script lang="ts">
   import { loadPageData } from "../../page_data/load";
   import NotifierConfigFields from "../../lib/NotifierConfigFields.svelte";
+  import ConfigElementLoader from "../../lib/ConfigElementLoader.svelte";
 
   interface NotifierConfigField {
     name: string;
@@ -12,12 +13,18 @@
     metadata: Record<string, any>;
   }
 
+  interface ConfigElementInfo {
+    tag: string;
+    scripts: string[];
+  }
+
   interface NotifierInfo {
     slug: string;
     name: string;
     icon: string;
     description: string;
     config_fields: NotifierConfigField[];
+    config_element: ConfigElementInfo | null;
   }
 
   interface DestinationInfo {
@@ -227,7 +234,16 @@
         </div>
       </div>
 
-      {#if notifierForSlug(createSlug)?.config_fields?.length}
+      {#if notifierForSlug(createSlug)?.config_element}
+        <ConfigElementLoader
+          tag={notifierForSlug(createSlug)!.config_element!.tag}
+          scripts={notifierForSlug(createSlug)!.config_element!.scripts}
+          config={createConfig}
+          datasetteBaseUrl="/"
+          databaseName={dbName}
+          onconfigchange={(cfg, valid) => { createConfig = cfg; }}
+        />
+      {:else if notifierForSlug(createSlug)?.config_fields?.length}
         <NotifierConfigFields
           fields={notifierForSlug(createSlug)?.config_fields ?? []}
           meta={createConfig}
@@ -257,7 +273,16 @@
                 <label>Label</label>
                 <input type="text" bind:value={editLabel} />
               </div>
-              {#if notifierForSlug(dest.notifier)?.config_fields?.length}
+              {#if notifierForSlug(dest.notifier)?.config_element}
+                <ConfigElementLoader
+                  tag={notifierForSlug(dest.notifier)!.config_element!.tag}
+                  scripts={notifierForSlug(dest.notifier)!.config_element!.scripts}
+                  config={editConfig}
+                  datasetteBaseUrl="/"
+                  databaseName={dbName}
+                  onconfigchange={(cfg, valid) => { editConfig = cfg; }}
+                />
+              {:else if notifierForSlug(dest.notifier)?.config_fields?.length}
                 <NotifierConfigFields
                   fields={notifierForSlug(dest.notifier)?.config_fields ?? []}
                   meta={editConfig}
