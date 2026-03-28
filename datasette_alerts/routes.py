@@ -7,7 +7,7 @@ from datasette_plugin_router import Body
 from .internal_db import InternalDB, NewAlertRouteParameters, NewDestination
 from .page_data import AlertDetailPageData, AlertInfo, AlertsListPageData, DestinationInfo, DestinationsPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
 from .router import router, check_permission
-from .bg_task import get_notifiers
+from .destinations import get_notifiers
 from .trigger_db import create_queue_and_trigger, drop_queue_and_trigger
 
 

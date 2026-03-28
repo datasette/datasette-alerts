@@ -14,6 +14,7 @@ from datasette_vite import vite_entry
 
 from .bg_task import bg_task
 from .notifier import Notifier, Message
+from .destinations import send_to_destination, DestinationNotFound, NotifierNotFound
 from .internal_db import InternalDB, NewAlertRouteParameters, NewSubscription
 _ = (InternalDB, NewAlertRouteParameters, NewSubscription)
 
@@ -26,6 +27,9 @@ _ = (routes,)
 __all__ = [
     Notifier,
     Message,
+    send_to_destination,
+    DestinationNotFound,
+    NotifierNotFound,
 ]
 
 pm.add_hookspecs(hookspecs)

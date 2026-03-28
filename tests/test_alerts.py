@@ -1,3 +1,4 @@
+from datasette import hookimpl
 from datasette.app import Datasette
 from datasette_alerts import (
     Notifier,
@@ -5,6 +6,9 @@ from datasette_alerts import (
     InternalDB,
     NewAlertRouteParameters,
     NewSubscription,
+    send_to_destination,
+    DestinationNotFound,
+    NotifierNotFound,
 )
 from datasette_alerts.internal_db import NewDestination
 from datasette_alerts.bg_task import _build_messages
@@ -702,3 +706,55 @@ async def test_api_delete_destination_not_found(datasette):
     )
     assert response.status_code == 404
     assert response.json()["ok"] is False
+
+
+# --- Stage 5: send_to_destination() tests ---
+
+_mock_notifier_instance = MockNotifier()
+
+
+class _MockNotifierPlugin:
+    @staticmethod
+    @hookimpl
+    def datasette_alerts_register_notifiers(datasette):
+        return [_mock_notifier_instance]
+
+
+from datasette.plugins import pm as _pm
+_pm.register(_MockNotifierPlugin(), name="test-mock-notifier-plugin")
+
+
+@pytest.mark.asyncio
+async def test_send_to_destination(datasette):
+    """Test the public send_to_destination() API."""
+    internal_db = InternalDB(datasette.get_internal_database())
+    dest_id = await internal_db.create_destination(
+        NewDestination(notifier="mock-notifier", label="Test Mock", config={"key": "value"})
+    )
+
+    _mock_notifier_instance.sent_messages.clear()
+    msg = Message("Hello from a plugin!", subject="Test")
+    await send_to_destination(datasette, dest_id, msg)
+
+    assert len(_mock_notifier_instance.sent_messages) == 1
+    assert _mock_notifier_instance.sent_messages[0]["config"] == {"key": "value"}
+    assert _mock_notifier_instance.sent_messages[0]["message"].text == "Hello from a plugin!"
+    assert _mock_notifier_instance.sent_messages[0]["message"].subject == "Test"
+
+
+@pytest.mark.asyncio
+async def test_send_to_destination_not_found(datasette):
+    """Test send_to_destination raises DestinationNotFound."""
+    with pytest.raises(DestinationNotFound):
+        await send_to_destination(datasette, "nonexistent", Message("test"))
+
+
+@pytest.mark.asyncio
+async def test_send_to_destination_notifier_not_found(datasette):
+    """Test send_to_destination raises NotifierNotFound for unknown notifier."""
+    internal_db = InternalDB(datasette.get_internal_database())
+    dest_id = await internal_db.create_destination(
+        NewDestination(notifier="unknown-notifier", label="Bad", config={})
+    )
+    with pytest.raises(NotifierNotFound):
+        await send_to_destination(datasette, dest_id, Message("test"))

@@ -1,13 +1,11 @@
 import json
 
 from .internal_db import InternalDB, ReadyJob, TriggerAlert
-from .notifier import Notifier, Message
+from .notifier import Message
 from .template import resolve_template
-from datasette.utils import await_me_maybe
-from typing import List
+from .destinations import get_notifiers
 import asyncio
 import uuid
-from datasette.plugins import pm
 from datasette.database import Database
 from .trigger_db import claim_queue_items, complete_queue_items, fail_queue_item
 
@@ -22,14 +20,6 @@ async def _fetch_row_data(db: Database, table_name: str, id_column: str, ids: li
     )
     columns = [desc[0] for desc in result.description]
     return [dict(zip(columns, row)) for row in result.rows]
-
-
-async def get_notifiers(datasette) -> List[Notifier]:
-    notifiers = []
-    for result in pm.hook.datasette_alerts_register_notifiers(datasette=datasette):
-        result = await await_me_maybe(result)
-        notifiers.extend(result)
-    return notifiers
 
 
 def _build_messages(
