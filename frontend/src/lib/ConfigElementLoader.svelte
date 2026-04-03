@@ -15,7 +15,14 @@
     onconfigchange: (config: Record<string, any>, valid: boolean) => void;
   }
 
-  let { tag, scripts, config, datasetteBaseUrl, databaseName, onconfigchange }: Props = $props();
+  let {
+    tag,
+    scripts,
+    config,
+    datasetteBaseUrl,
+    databaseName,
+    onconfigchange,
+  }: Props = $props();
 
   let container: HTMLDivElement | undefined = $state();
   let loaded = $state(false);

@@ -8,8 +8,11 @@ class ConfigElement(BaseModel):
     Notifiers can return this from get_config_element() to provide
     a custom web component instead of the default WTForms-based config.
     """
+
     tag: str  # Custom element tag name, e.g. "datasette-discord-destination-form"
-    scripts: list[str]  # JS files to load, e.g. ["/-/static-plugins/datasette-alerts-discord/config.js"]
+    scripts: list[
+        str
+    ]  # JS files to load, e.g. ["/-/static-plugins/datasette-alerts-discord/config.js"]
 
 
 class Message:
@@ -28,13 +31,11 @@ class Message:
 class Notifier(ABC):
     @property
     @abstractmethod
-    def slug(self):
-        ...
+    def slug(self): ...
 
     @property
     @abstractmethod
-    def name(self):
-        ...
+    def name(self): ...
 
     description: str = ""
     icon: str = ""

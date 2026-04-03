@@ -110,4 +110,9 @@ class AlertDetailPageData(BaseModel):
     destinations: list[DestinationInfo] = []
 
 
-__exports__ = [NewAlertPageData, AlertsListPageData, AlertDetailPageData, DestinationsPageData]
+__exports__ = [
+    NewAlertPageData,
+    AlertsListPageData,
+    AlertDetailPageData,
+    DestinationsPageData,
+]

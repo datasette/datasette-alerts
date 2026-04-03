@@ -7,6 +7,12 @@
 - `just types` — regenerate route + page data types
 - `just dev` — run datasette dev server (watchexec, port 7006)
 - `just dev-with-hmr` — dev server + Vite HMR
+- `just format` — format all code (frontend + backend)
+- `just format-frontend` — prettier on frontend
+- `just format-backend` — ruff format on backend
+- `just check` — lint/check all code (frontend + backend)
+- `just check-frontend` — prettier check + svelte-check + tsc
+- `just check-backend` — ruff check + ty check
 
 ## Project Structure
 

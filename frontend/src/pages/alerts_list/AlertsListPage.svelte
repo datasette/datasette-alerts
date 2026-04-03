@@ -51,17 +51,29 @@
       <tbody>
         {#each alerts as alert}
           <tr>
-            <td><a href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/alerts/${alert.id}`}><code>{alert.id}</code></a></td>
+            <td
+              ><a
+                href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/alerts/${alert.id}`}
+                ><code>{alert.id}</code></a
+              ></td
+            >
             <td><code>{alert.table_name}</code></td>
             <td>
-              <span class="type-badge" class:trigger={alert.alert_type === "trigger"}>
+              <span
+                class="type-badge"
+                class:trigger={alert.alert_type === "trigger"}
+              >
                 {alert.alert_type === "trigger" ? "Real-time" : "Polling"}
               </span>
             </td>
             <td>{alert.notifiers}</td>
-            <td>{alert.alert_type === "trigger" ? "\u2014" : alert.frequency}</td>
+            <td
+              >{alert.alert_type === "trigger" ? "\u2014" : alert.frequency}</td
+            >
             <td title={alert.next_deadline ?? ""}>
-              {alert.alert_type === "trigger" ? "realtime" : formatSeconds(alert.seconds_until_next)}
+              {alert.alert_type === "trigger"
+                ? "realtime"
+                : formatSeconds(alert.seconds_until_next)}
             </td>
             <td>{alert.last_notification_at ?? "\u2014"}</td>
           </tr>
@@ -112,6 +124,7 @@
     text-align: left;
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #e0e0e0;
+    white-space: nowrap;
   }
   .alerts-table th {
     font-weight: 600;

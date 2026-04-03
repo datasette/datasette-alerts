@@ -10,7 +10,9 @@ from datasette.database import Database
 from .trigger_db import claim_queue_items, complete_queue_items, fail_queue_item
 
 
-async def _fetch_row_data(db: Database, table_name: str, id_column: str, ids: list) -> list[dict]:
+async def _fetch_row_data(
+    db: Database, table_name: str, id_column: str, ids: list
+) -> list[dict]:
     """Fetch full row data for given IDs from the target database."""
     if not ids:
         return []
@@ -38,10 +40,13 @@ def _build_messages(
 
     if template_json and isinstance(template_json, dict):
         if aggregate or not row_data:
-            text = resolve_template(template_json, {
-                "count": str(len(new_ids)),
-                "table_name": table_name,
-            })
+            text = resolve_template(
+                template_json,
+                {
+                    "count": str(len(new_ids)),
+                    "table_name": table_name,
+                },
+            )
             return [Message(text)]
         else:
             messages = []
@@ -87,7 +92,9 @@ async def _send_for_subscription(
         config = subscription.destination_config
     else:
         config = _notifier_config(subscription.meta)
-    messages = _build_messages(subscription.meta, new_ids, row_data, table_name, database_name)
+    messages = _build_messages(
+        subscription.meta, new_ids, row_data, table_name, database_name
+    )
 
     for message in messages:
         await notifier.send(config, message)
@@ -108,9 +115,7 @@ async def job_tick(datasette, internal_db: InternalDB, job: ReadyJob):
         [job.cursor],
     )
     new_ids = [row[0] for row in result]
-    cursor = max(
-        [row[1] for row in result], default=job.cursor
-    )
+    cursor = max([row[1] for row in result], default=job.cursor)
     print(job.alert_id, new_ids, cursor)
     await internal_db.add_log(job.alert_id, new_ids, cursor)  # type: ignore
     await internal_db.schedule_next(job.alert_id)
@@ -132,8 +137,12 @@ async def job_tick(datasette, internal_db: InternalDB, job: ReadyJob):
                     print(f"Failed to fetch row data: {e}")
 
             await _send_for_subscription(
-                datasette, subscription, new_ids, row_data,
-                job.table_name, job.database_name,
+                datasette,
+                subscription,
+                new_ids,
+                row_data,
+                job.table_name,
+                job.database_name,
             )
 
 
@@ -170,8 +179,12 @@ async def trigger_tick(datasette, internal_db: InternalDB, alert: TriggerAlert):
                     print(f"Failed to fetch row data: {e2}")
 
             await _send_for_subscription(
-                datasette, subscription, new_ids, row_data,
-                alert.table_name, alert.database_name,
+                datasette,
+                subscription,
+                new_ids,
+                row_data,
+                alert.table_name,
+                alert.database_name,
             )
         except Exception as e:
             print(f"trigger notifier error: {e}")

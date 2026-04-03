@@ -5,14 +5,31 @@ from datasette import Response
 from datasette_plugin_router import Body
 
 from .internal_db import InternalDB, NewAlertRouteParameters, NewDestination
-from .page_data import AlertDetailPageData, AlertInfo, AlertsListPageData, ConfigElementInfo, DestinationInfo, DestinationsPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
+from .notifier import Message
+from .page_data import (
+    AlertDetailPageData,
+    AlertInfo,
+    AlertsListPageData,
+    ConfigElementInfo,
+    DestinationInfo,
+    DestinationsPageData,
+    NewAlertPageData,
+    NewAlertResponse,
+    NotifierConfigField,
+    NotifierInfo,
+)
 from .router import router, check_permission
-from .destinations import get_notifiers
+from .destinations import get_notifiers, send_to_destination
 from .trigger_db import create_queue_and_trigger, drop_queue_and_trigger
 
 
 async def render_page(
-    datasette, request, *, page_title: str, entrypoint: str, page_data: BaseModel,
+    datasette,
+    request,
+    *,
+    page_title: str,
+    entrypoint: str,
+    page_data: BaseModel,
     breadcrumbs: list[dict] | None = None,
 ) -> Response:
     return Response.html(
@@ -98,8 +115,11 @@ async def _build_destination_infos(internal_db: InternalDB) -> list[DestinationI
     dests = await internal_db.list_destinations()
     return [
         DestinationInfo(
-            id=d.id, notifier=d.notifier, label=d.label,
-            config=d.config, created_at=d.created_at,
+            id=d.id,
+            notifier=d.notifier,
+            label=d.label,
+            config=d.config,
+            created_at=d.created_at,
         )
         for d in dests
     ]
@@ -114,7 +134,10 @@ def _base_crumbs(datasette, db_name: str) -> list[dict]:
 
 def _alerts_crumbs(datasette, db_name: str) -> list[dict]:
     return _base_crumbs(datasette, db_name) + [
-        {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts"), "label": "Alerts"},
+        {
+            "href": datasette.urls.path(f"-/{db_name}/datasette-alerts"),
+            "label": "Alerts",
+        },
     ]
 
 
@@ -159,9 +182,17 @@ async def ui_alert_detail(datasette, request, db_name: str, alert_id: str):
         request,
         page_title=f"Alert — {detail['table_name']}",
         entrypoint="src/pages/alert_detail/index.ts",
-        page_data=AlertDetailPageData(**detail, notifiers=notifier_infos, destinations=destination_infos),
-        breadcrumbs=_alerts_crumbs(datasette, db_name) + [
-            {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts/alerts/{alert_id}"), "label": detail["table_name"]},
+        page_data=AlertDetailPageData(
+            **detail, notifiers=notifier_infos, destinations=destination_infos
+        ),
+        breadcrumbs=_alerts_crumbs(datasette, db_name)
+        + [
+            {
+                "href": datasette.urls.path(
+                    f"-/{db_name}/datasette-alerts/alerts/{alert_id}"
+                ),
+                "label": detail["table_name"],
+            },
         ],
     )
 
@@ -198,13 +229,19 @@ async def ui_new_alert(datasette, request, db_name: str):
             destinations=destination_infos,
             filter_params=filter_params,
         ),
-        breadcrumbs=_alerts_crumbs(datasette, db_name) + [
-            {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts/new"), "label": "New Alert"},
+        breadcrumbs=_alerts_crumbs(datasette, db_name)
+        + [
+            {
+                "href": datasette.urls.path(f"-/{db_name}/datasette-alerts/new"),
+                "label": "New Alert",
+            },
         ],
     )
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/new$", output=NewAlertResponse)
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/new$", output=NewAlertResponse
+)
 @check_permission()
 async def api_new_alert(
     datasette, request, db_name: str, body: Annotated[NewAlertRouteParameters, Body()]
@@ -252,30 +289,47 @@ class UpdateSubscriptionBody(BaseModel):
     meta: dict = {}
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions$")
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions$"
+)
 @check_permission()
 async def api_add_subscription(
-    datasette, request, db_name: str, alert_id: str, body: Annotated[AddSubscriptionBody, Body()]
+    datasette,
+    request,
+    db_name: str,
+    alert_id: str,
+    body: Annotated[AddSubscriptionBody, Body()],
 ):
     internal_db = InternalDB(datasette.get_internal_database())
     detail = await internal_db.get_alert_detail(alert_id)
     if detail is None:
         return Response.json({"ok": False, "error": "Alert not found"}, status=404)
-    sub_id = await internal_db.add_subscription(alert_id, body.destination_id, body.meta)
+    sub_id = await internal_db.add_subscription(
+        alert_id, body.destination_id, body.meta
+    )
     return Response.json({"ok": True, "data": {"subscription_id": sub_id}})
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions/(?P<sub_id>[^/]+)/update$")
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions/(?P<sub_id>[^/]+)/update$"
+)
 @check_permission()
 async def api_update_subscription(
-    datasette, request, db_name: str, alert_id: str, sub_id: str, body: Annotated[UpdateSubscriptionBody, Body()]
+    datasette,
+    request,
+    db_name: str,
+    alert_id: str,
+    sub_id: str,
+    body: Annotated[UpdateSubscriptionBody, Body()],
 ):
     internal_db = InternalDB(datasette.get_internal_database())
     await internal_db.update_subscription(sub_id, body.meta)
     return Response.json({"ok": True})
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions/(?P<sub_id>[^/]+)/delete$")
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions/(?P<sub_id>[^/]+)/delete$"
+)
 @check_permission()
 async def api_delete_subscription(
     datasette, request, db_name: str, alert_id: str, sub_id: str
@@ -285,7 +339,9 @@ async def api_delete_subscription(
     return Response.json({"ok": True})
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/delete$")
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/delete$"
+)
 @check_permission()
 async def api_delete_alert(datasette, request, db_name: str, alert_id: str):
     internal_db = InternalDB(datasette.get_internal_database())
@@ -329,8 +385,14 @@ async def ui_destinations_list(datasette, request, db_name: str):
             destinations=destination_infos,
             notifiers=notifier_infos,
         ),
-        breadcrumbs=_alerts_crumbs(datasette, db_name) + [
-            {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts/destinations"), "label": "Destinations"},
+        breadcrumbs=_alerts_crumbs(datasette, db_name)
+        + [
+            {
+                "href": datasette.urls.path(
+                    f"-/{db_name}/datasette-alerts/destinations"
+                ),
+                "label": "Destinations",
+            },
         ],
     )
 
@@ -360,27 +422,91 @@ async def api_new_destination(
     return Response.json({"ok": True, "data": {"destination_id": dest_id}})
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/(?P<dest_id>[^/]+)/update$")
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/(?P<dest_id>[^/]+)/update$"
+)
 @check_permission()
 async def api_update_destination(
-    datasette, request, db_name: str, dest_id: str, body: Annotated[UpdateDestinationBody, Body()]
+    datasette,
+    request,
+    db_name: str,
+    dest_id: str,
+    body: Annotated[UpdateDestinationBody, Body()],
 ):
     internal_db = InternalDB(datasette.get_internal_database())
     dest = await internal_db.get_destination(dest_id)
     if dest is None:
-        return Response.json({"ok": False, "error": "Destination not found"}, status=404)
+        return Response.json(
+            {"ok": False, "error": "Destination not found"}, status=404
+        )
     await internal_db.update_destination(dest_id, body.label, body.config)
     return Response.json({"ok": True})
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/(?P<dest_id>[^/]+)/delete$")
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/(?P<dest_id>[^/]+)/delete$"
+)
 @check_permission()
-async def api_delete_destination(
-    datasette, request, db_name: str, dest_id: str
-):
+async def api_delete_destination(datasette, request, db_name: str, dest_id: str):
     internal_db = InternalDB(datasette.get_internal_database())
     dest = await internal_db.get_destination(dest_id)
     if dest is None:
-        return Response.json({"ok": False, "error": "Destination not found"}, status=404)
+        return Response.json(
+            {"ok": False, "error": "Destination not found"}, status=404
+        )
     await internal_db.delete_destination(dest_id)
     return Response.json({"ok": True})
+
+
+class TestDestinationBody(BaseModel):
+    notifier: str
+    config: dict = {}
+    text: str = "Test message from Datasette Alerts"
+    subject: str = "Destination Test"
+
+
+class TestSavedDestinationBody(BaseModel):
+    text: str = "Test message from Datasette Alerts"
+    subject: str = "Destination Test"
+
+
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/test$")
+@check_permission()
+async def api_test_destination_transient(
+    datasette, request, db_name: str, body: Annotated[TestDestinationBody, Body()]
+):
+    """Test a destination config without saving it. Sends a real test message."""
+    notifiers = await get_notifiers(datasette)
+    notifier = next((n for n in notifiers if n.slug == body.notifier), None)
+    if notifier is None:
+        return Response.json(
+            {"ok": False, "error": f"Notifier {body.notifier!r} not found"}, status=404
+        )
+    try:
+        await notifier.send(
+            body.config, Message(body.text, subject=body.subject or None)
+        )
+        return Response.json({"ok": True})
+    except Exception as e:
+        return Response.json({"ok": False, "error": str(e)}, status=400)
+
+
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/(?P<dest_id>[^/]+)/test$"
+)
+@check_permission()
+async def api_test_destination_saved(
+    datasette,
+    request,
+    db_name: str,
+    dest_id: str,
+    body: Annotated[TestSavedDestinationBody, Body()],
+):
+    """Test a saved destination by sending a real test message."""
+    try:
+        await send_to_destination(
+            datasette, dest_id, Message(body.text, subject=body.subject or None)
+        )
+        return Response.json({"ok": True})
+    except Exception as e:
+        return Response.json({"ok": False, "error": str(e)}, status=400)
