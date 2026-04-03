@@ -1,7 +1,7 @@
 <script lang="ts">
   import { loadPageData } from "../../page_data/load";
   import type { AlertDetailPageData } from "../../page_data/AlertDetailPageData.types";
-  import NotifierConfigFields from "../../lib/NotifierConfigFields.svelte";
+  import TemplateEditor from "../../lib/template-editor/TemplateEditor.svelte";
 
   const data = loadPageData<AlertDetailPageData>();
   const alertType = data.alert_type ?? "cursor";
@@ -9,8 +9,7 @@
   const notifiers = data.notifiers ?? [];
   const destinations: any[] = (data as any).destinations ?? [];
 
-  type Subscription = AlertDetailPageData["subscriptions"][number];
-  type Notifier = AlertDetailPageData["notifiers"][number];
+  type Subscription = NonNullable<AlertDetailPageData["subscriptions"]>[number];
 
   let subscriptions: Subscription[] = $state([...(data.subscriptions ?? [])]);
   let deleting = $state(false);
@@ -36,15 +35,15 @@
     return notifiers.find((n) => n.slug === sub.notifier)?.name ?? sub.notifier;
   }
 
-  function notifierForSlug(slug: string): Notifier | undefined {
-    return notifiers.find((n) => n.slug === slug);
-  }
-
   function subscriptionSummary(sub: Subscription): string {
     const parts: string[] = [];
     if (sub.meta?.aggregate === false) parts.push("per-row");
     if (sub.meta?.message_template) parts.push("custom template");
     return parts.join(", ");
+  }
+
+  function getEditTemplateVars(): string[] {
+    return editMeta.aggregate !== false ? ["count", "table_name"] : [];
   }
 
   function startEdit(sub: Subscription) {
@@ -135,7 +134,11 @@
   }
 
   async function handleDelete() {
-    if (!window.confirm("Are you sure you want to delete this alert? This cannot be undone.")) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this alert? This cannot be undone.",
+      )
+    ) {
       return;
     }
     deleting = true;
@@ -168,16 +171,28 @@
   }
 
   function formatFilter(pair: string[]): string {
-    const [key, value] = pair;
+    const key = pair[0] ?? "";
+    const value = pair[1] ?? "";
     if (key.includes("__")) {
       const idx = key.lastIndexOf("__");
       const col = key.substring(0, idx);
       const op = key.substring(idx + 2);
       const opLabels: Record<string, string> = {
-        exact: "=", not: "!=", contains: "contains", startswith: "starts with",
-        endswith: "ends with", gt: ">", gte: ">=", lt: "<", lte: "<=",
-        like: "like", glob: "glob", in: "in", notin: "not in",
-        isnull: "is null", notnull: "is not null",
+        exact: "=",
+        not: "!=",
+        contains: "contains",
+        startswith: "starts with",
+        endswith: "ends with",
+        gt: ">",
+        gte: ">=",
+        lt: "<",
+        lte: "<=",
+        like: "like",
+        glob: "glob",
+        in: "in",
+        notin: "not in",
+        isnull: "is null",
+        notnull: "is not null",
       };
       return `${col} ${opLabels[op] ?? op} ${value}`;
     }
@@ -193,13 +208,24 @@
     <dd><code>{data.id}</code></dd>
 
     <dt>Type</dt>
-    <dd>{alertType === "trigger" ? "Real-time Row Alert" : "Polling Row Alert"}</dd>
+    <dd>
+      {alertType === "trigger" ? "Real-time Row Alert" : "Polling Row Alert"}
+    </dd>
 
     <dt>Database</dt>
-    <dd><a href={`/${encodeURIComponent(data.database_name)}`}>{data.database_name}</a></dd>
+    <dd>
+      <a href={`/${encodeURIComponent(data.database_name)}`}
+        >{data.database_name}</a
+      >
+    </dd>
 
     <dt>Table</dt>
-    <dd><a href={`/${encodeURIComponent(data.database_name)}/${encodeURIComponent(data.table_name)}`}><code>{data.table_name}</code></a></dd>
+    <dd>
+      <a
+        href={`/${encodeURIComponent(data.database_name)}/${encodeURIComponent(data.table_name)}`}
+        ><code>{data.table_name}</code></a
+      >
+    </dd>
 
     {#if alertType === "cursor"}
       <dt>ID columns</dt>
@@ -212,7 +238,9 @@
       <dd>{data.frequency}</dd>
 
       <dt>Next fire</dt>
-      <dd title={data.next_deadline ?? ""}>{formatSeconds(data.seconds_until_next)}</dd>
+      <dd title={data.next_deadline ?? ""}>
+        {formatSeconds(data.seconds_until_next)}
+      </dd>
     {/if}
 
     {#if alertType === "trigger" && filterParams.length > 0}
@@ -228,7 +256,13 @@
 
     {#if alertType === "trigger"}
       <dt>Queue</dt>
-      <dd><a class="queue-link" href={`/${encodeURIComponent(data.database_name)}/_datasette_alerts_queue_${data.id}`}>_datasette_alerts_queue_{data.id}</a></dd>
+      <dd>
+        <a
+          class="queue-link"
+          href={`/${encodeURIComponent(data.database_name)}/_datasette_alerts_queue_${data.id}`}
+          >_datasette_alerts_queue_{data.id}</a
+        >
+      </dd>
     {/if}
 
     <dt>Created</dt>
@@ -247,11 +281,47 @@
               <div class="sub-edit-header">
                 <strong>{destinationLabel(sub)}</strong>
               </div>
+              <div class="sub-edit-fields">
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={editMeta.aggregate !== false}
+                    onchange={(e) => {
+                      editMeta = {
+                        ...editMeta,
+                        aggregate: (e.currentTarget as HTMLInputElement)
+                          .checked,
+                      };
+                    }}
+                  />
+                  Aggregate mode
+                </label>
+                <p class="field-description">
+                  Send one message per batch instead of one per row
+                </p>
+
+                <!-- svelte-ignore a11y_label_has_associated_control -->
+                <label class="field-label">Message template</label>
+                <TemplateEditor
+                  value={editMeta.message_template ?? null}
+                  variables={getEditTemplateVars()}
+                  onchange={(doc) => {
+                    editMeta = { ...editMeta, message_template: doc };
+                  }}
+                />
+              </div>
               <div class="sub-edit-actions">
-                <button type="button" class="save-btn" onclick={() => saveEdit(sub.id)} disabled={savingSubId === sub.id}>
+                <button
+                  type="button"
+                  class="save-btn"
+                  onclick={() => saveEdit(sub.id)}
+                  disabled={savingSubId === sub.id}
+                >
                   {savingSubId === sub.id ? "Saving..." : "Save"}
                 </button>
-                <button type="button" class="cancel-btn" onclick={cancelEdit}>Cancel</button>
+                <button type="button" class="cancel-btn" onclick={cancelEdit}
+                  >Cancel</button
+                >
               </div>
             </div>
           {:else}
@@ -263,8 +333,16 @@
                 {/if}
               </div>
               <div class="sub-actions">
-                <button type="button" class="edit-btn" onclick={() => startEdit(sub)}>Edit</button>
-                <button type="button" class="delete-sub-btn" onclick={() => deleteSub(sub.id)}>Remove</button>
+                <button
+                  type="button"
+                  class="edit-btn"
+                  onclick={() => startEdit(sub)}>Edit</button
+                >
+                <button
+                  type="button"
+                  class="delete-sub-btn"
+                  onclick={() => deleteSub(sub.id)}>Remove</button
+                >
               </div>
             </div>
           {/if}
@@ -298,14 +376,30 @@
           {/each}
         </div>
         <div class="add-sub-actions">
-          <button type="button" onclick={handleAddSubscription} disabled={addingSub}>
+          <button
+            type="button"
+            onclick={handleAddSubscription}
+            disabled={addingSub}
+          >
             {addingSub ? "Adding..." : "Add"}
           </button>
-          <button type="button" class="cancel-btn" onclick={() => { showAddForm = false; }}>Cancel</button>
+          <button
+            type="button"
+            class="cancel-btn"
+            onclick={() => {
+              showAddForm = false;
+            }}>Cancel</button
+          >
         </div>
       </div>
     {:else}
-      <button type="button" class="add-notifier-btn" onclick={() => { showAddForm = true; }}>
+      <button
+        type="button"
+        class="add-notifier-btn"
+        onclick={() => {
+          showAddForm = true;
+        }}
+      >
         Add destination
       </button>
     {/if}
@@ -331,7 +425,10 @@
             <td>{log.logged_at ?? ""}</td>
             <td>
               {#if (log.new_ids ?? []).length > 0}
-                {log.new_ids.length} record{log.new_ids.length === 1 ? "" : "s"}
+                {(log.new_ids ?? []).length} record{(log.new_ids ?? [])
+                  .length === 1
+                  ? ""
+                  : "s"}
               {:else}
                 &mdash;
               {/if}
@@ -434,7 +531,10 @@
     gap: 0.4rem;
     flex-shrink: 0;
   }
-  .edit-btn, .delete-sub-btn, .save-btn, .cancel-btn {
+  .edit-btn,
+  .delete-sub-btn,
+  .save-btn,
+  .cancel-btn {
     padding: 0.2rem 0.5rem;
     border-radius: 4px;
     cursor: pointer;
@@ -484,6 +584,26 @@
   .sub-edit-header {
     margin-bottom: 0.25rem;
   }
+  .sub-edit-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+  .field-description {
+    font-size: 0.8rem;
+    color: #666;
+    margin: 0;
+  }
+  .field-label {
+    font-weight: 600;
+    margin-top: 0.25rem;
+  }
   .sub-edit-actions {
     display: flex;
     gap: 0.4rem;
@@ -524,10 +644,6 @@
     align-items: center;
     gap: 0.5rem;
     cursor: pointer;
-  }
-  .notifier-icon {
-    display: inline-flex;
-    align-items: center;
   }
   .dest-type-badge {
     font-size: 0.8rem;

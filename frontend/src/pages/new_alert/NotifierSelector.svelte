@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import type { NewAlertPageData } from "../../page_data/NewAlertPageData.types";
   import TemplateEditor from "../../lib/template-editor/TemplateEditor.svelte";
 
-  type Notifier = NewAlertPageData["notifiers"][number];
+  type Notifier = NonNullable<NewAlertPageData["notifiers"]>[number];
 
   interface Props {
     notifiers: Notifier[];
@@ -12,8 +13,10 @@
 
   let { notifiers, columns, onadd }: Props = $props();
 
-  let selectedSlug = $state(notifiers[0]?.slug ?? "");
-  let meta: Record<string, any> = $state(initDefaults(notifiers[0]));
+  let selectedSlug = $state(untrack(() => notifiers[0]?.slug ?? ""));
+  let meta: Record<string, any> = $state(
+    untrack(() => initDefaults(notifiers[0])),
+  );
 
   function initDefaults(notifier: Notifier | undefined): Record<string, any> {
     if (!notifier) return {};
@@ -32,13 +35,15 @@
     notifiers.find((n) => n.slug === selectedSlug),
   );
 
-  function getTemplateVariables(field: Notifier["config_fields"][number]): string[] {
+  function getTemplateVariables(
+    field: NonNullable<Notifier["config_fields"]>[number],
+  ): string[] {
     const md = field.metadata ?? {};
-    const aggregateField = md.aggregate_field;
+    const aggregateField = md.aggregate_field as string | undefined;
     if (aggregateField) {
       const isAggregate = !!meta[aggregateField];
       if (isAggregate) {
-        return md.aggregate_vars ?? [];
+        return (md.aggregate_vars as string[]) ?? [];
       }
       return columns;
     }

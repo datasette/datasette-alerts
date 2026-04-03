@@ -45,7 +45,9 @@
   const dbName = pageData.database_name;
   const notifiers = pageData.notifiers ?? [];
 
-  let destinations: DestinationInfo[] = $state([...(pageData.destinations ?? [])]);
+  let destinations: DestinationInfo[] = $state([
+    ...(pageData.destinations ?? []),
+  ]);
 
   // Create form state
   let showCreateForm = $state(false);
@@ -59,6 +61,15 @@
   let editLabel = $state("");
   let editConfig: Record<string, any> = $state({});
   let saving = $state(false);
+
+  // Test dialog state
+  let testDialogOpen = $state(false);
+  let testMode: "saved" | "transient" = $state("saved");
+  let testTargetId: string | null = $state(null);
+  let testSubject = $state("Destination Test");
+  let testMessage = $state("Test message from Datasette Alerts");
+  let testSending = $state(false);
+  let testResult: { ok: boolean; message: string } | null = $state(null);
 
   function apiBase(): string {
     return `/-/${encodeURIComponent(dbName)}/datasette-alerts/api/destinations`;
@@ -76,7 +87,9 @@
     return notifiers.find((n) => n.slug === slug);
   }
 
-  function initDefaults(notifier: NotifierInfo | undefined): Record<string, any> {
+  function initDefaults(
+    notifier: NotifierInfo | undefined,
+  ): Record<string, any> {
     if (!notifier) return {};
     const defaults: Record<string, any> = {};
     for (const field of notifier.config_fields ?? []) {
@@ -113,12 +126,22 @@
       const resp = await fetch(`${apiBase()}/new`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notifier: createSlug, label: createLabel, config: createConfig }),
+        body: JSON.stringify({
+          notifier: createSlug,
+          label: createLabel,
+          config: createConfig,
+        }),
       });
       const result = await resp.json();
       if (result.ok) {
         destinations = [
-          { id: result.data.destination_id, notifier: createSlug, label: createLabel, config: { ...createConfig }, created_at: null },
+          {
+            id: result.data.destination_id,
+            notifier: createSlug,
+            label: createLabel,
+            config: { ...createConfig },
+            created_at: null,
+          },
           ...destinations,
         ];
         showCreateForm = false;
@@ -154,7 +177,9 @@
       const result = await resp.json();
       if (result.ok) {
         destinations = destinations.map((d) =>
-          d.id === destId ? { ...d, label: editLabel, config: { ...editConfig } } : d,
+          d.id === destId
+            ? { ...d, label: editLabel, config: { ...editConfig } }
+            : d,
         );
         editingId = null;
       } else {
@@ -168,7 +193,12 @@
   }
 
   async function handleDelete(destId: string) {
-    if (!window.confirm("Delete this destination? Alerts using it will stop sending.")) return;
+    if (
+      !window.confirm(
+        "Delete this destination? Alerts using it will stop sending.",
+      )
+    )
+      return;
     try {
       const resp = await fetch(`${apiBase()}/${destId}/delete`, {
         method: "POST",
@@ -185,13 +215,69 @@
       alert(e instanceof Error ? e.message : "Failed to delete destination");
     }
   }
+
+  function openTestDialog(
+    mode: "saved" | "transient",
+    destId: string | null = null,
+  ) {
+    testMode = mode;
+    testTargetId = destId;
+    testSubject = "Destination Test";
+    testMessage = "Test message from Datasette Alerts";
+    testResult = null;
+    testSending = false;
+    testDialogOpen = true;
+  }
+
+  async function handleTestSend() {
+    testSending = true;
+    testResult = null;
+    try {
+      let url: string;
+      let body: Record<string, unknown>;
+      if (testMode === "saved" && testTargetId) {
+        url = `${apiBase()}/${testTargetId}/test`;
+        body = { subject: testSubject, text: testMessage };
+      } else {
+        url = `${apiBase()}/test`;
+        body = {
+          notifier: createSlug,
+          config: createConfig,
+          subject: testSubject,
+          text: testMessage,
+        };
+      }
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await resp.json();
+      testResult = result.ok
+        ? { ok: true, message: "Test message sent!" }
+        : { ok: false, message: result.error ?? "Test failed" };
+    } catch (e: unknown) {
+      testResult = {
+        ok: false,
+        message: e instanceof Error ? e.message : "Test failed",
+      };
+    } finally {
+      testSending = false;
+    }
+  }
 </script>
 
 <div class="destinations-container">
   <div class="destinations-header">
     <h2>Destinations</h2>
     {#if !showCreateForm}
-      <button class="new-btn" onclick={() => { showCreateForm = true; resetCreateForm(); }}>
+      <button
+        class="new-btn"
+        onclick={() => {
+          showCreateForm = true;
+          resetCreateForm();
+        }}
+      >
         New destination
       </button>
     {/if}
@@ -211,6 +297,7 @@
       </div>
 
       <div class="form-field">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label>Notifier type</label>
         <div class="notifier-select">
           {#each notifiers as notifier}
@@ -241,28 +328,47 @@
           config={createConfig}
           datasetteBaseUrl="/"
           databaseName={dbName}
-          onconfigchange={(cfg, valid) => { createConfig = cfg; }}
+          onconfigchange={(cfg, _valid) => {
+            createConfig = cfg;
+          }}
         />
       {:else if notifierForSlug(createSlug)?.config_fields?.length}
         <NotifierConfigFields
           fields={notifierForSlug(createSlug)?.config_fields ?? []}
           meta={createConfig}
           columns={[]}
-          onmetachange={(m) => { createConfig = m; }}
+          onmetachange={(m) => {
+            createConfig = m;
+          }}
         />
       {/if}
 
       <div class="form-actions">
-        <button onclick={handleCreate} disabled={creating || !createLabel.trim()}>
+        <button
+          onclick={handleCreate}
+          disabled={creating || !createLabel.trim()}
+        >
           {creating ? "Creating..." : "Create"}
         </button>
-        <button class="cancel-btn" onclick={() => { showCreateForm = false; }}>Cancel</button>
+        <button
+          type="button"
+          class="test-btn"
+          onclick={() => openTestDialog("transient")}>Send test</button
+        >
+        <button
+          class="cancel-btn"
+          onclick={() => {
+            showCreateForm = false;
+          }}>Cancel</button
+        >
       </div>
     </div>
   {/if}
 
   {#if destinations.length === 0 && !showCreateForm}
-    <p class="empty">No destinations configured. Create one to start sending notifications.</p>
+    <p class="empty">
+      No destinations configured. Create one to start sending notifications.
+    </p>
   {:else}
     <div class="destinations-list">
       {#each destinations as dest (dest.id)}
@@ -270,28 +376,37 @@
           {#if editingId === dest.id}
             <div class="dest-edit">
               <div class="form-field">
-                <label>Label</label>
-                <input type="text" bind:value={editLabel} />
+                <label>Label <input type="text" bind:value={editLabel} /></label
+                >
               </div>
               {#if notifierForSlug(dest.notifier)?.config_element}
                 <ConfigElementLoader
                   tag={notifierForSlug(dest.notifier)!.config_element!.tag}
-                  scripts={notifierForSlug(dest.notifier)!.config_element!.scripts}
+                  scripts={notifierForSlug(dest.notifier)!.config_element!
+                    .scripts}
                   config={editConfig}
                   datasetteBaseUrl="/"
                   databaseName={dbName}
-                  onconfigchange={(cfg, valid) => { editConfig = cfg; }}
+                  onconfigchange={(cfg, _valid) => {
+                    editConfig = cfg;
+                  }}
                 />
               {:else if notifierForSlug(dest.notifier)?.config_fields?.length}
                 <NotifierConfigFields
                   fields={notifierForSlug(dest.notifier)?.config_fields ?? []}
                   meta={editConfig}
                   columns={[]}
-                  onmetachange={(m) => { editConfig = m; }}
+                  onmetachange={(m) => {
+                    editConfig = m;
+                  }}
                 />
               {/if}
               <div class="dest-edit-actions">
-                <button class="save-btn" onclick={() => saveEdit(dest.id)} disabled={saving}>
+                <button
+                  class="save-btn"
+                  onclick={() => saveEdit(dest.id)}
+                  disabled={saving}
+                >
                   {saving ? "Saving..." : "Save"}
                 </button>
                 <button class="cancel-btn" onclick={cancelEdit}>Cancel</button>
@@ -301,7 +416,9 @@
             <div class="dest-row">
               <div class="dest-info">
                 {#if notifierIcon(dest.notifier)}
-                  <span class="notifier-icon">{@html notifierIcon(dest.notifier)}</span>
+                  <span class="notifier-icon"
+                    >{@html notifierIcon(dest.notifier)}</span
+                  >
                 {/if}
                 <strong>{dest.label}</strong>
                 <span class="dest-type">{notifierName(dest.notifier)}</span>
@@ -310,13 +427,98 @@
                 {/if}
               </div>
               <div class="dest-actions">
-                <button class="edit-btn" onclick={() => startEdit(dest)}>Edit</button>
-                <button class="delete-btn" onclick={() => handleDelete(dest.id)}>Delete</button>
+                <button
+                  class="test-btn"
+                  onclick={() => openTestDialog("saved", dest.id)}>Test</button
+                >
+                <button class="edit-btn" onclick={() => startEdit(dest)}
+                  >Edit</button
+                >
+                <button class="delete-btn" onclick={() => handleDelete(dest.id)}
+                  >Delete</button
+                >
               </div>
             </div>
           {/if}
         </div>
       {/each}
+    </div>
+  {/if}
+
+  <!-- Test dialog -->
+  {#if testDialogOpen}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="dialog-backdrop"
+      role="button"
+      tabindex="-1"
+      onclick={() => {
+        testDialogOpen = false;
+      }}
+      onkeydown={(e) => {
+        if (e.key === "Escape") testDialogOpen = false;
+      }}
+    >
+      <div
+        class="test-dialog"
+        role="dialog"
+        tabindex="-1"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+      >
+        <div class="test-dialog-header">
+          <h3>Send test message</h3>
+          <button
+            type="button"
+            class="dialog-close"
+            onclick={() => {
+              testDialogOpen = false;
+            }}>&times;</button
+          >
+        </div>
+        <div class="form-field">
+          <label for="test-subject">Subject</label>
+          <input
+            type="text"
+            id="test-subject"
+            bind:value={testSubject}
+            placeholder="Subject (optional)"
+          />
+        </div>
+        <div class="form-field">
+          <label for="test-message">Message</label>
+          <textarea
+            id="test-message"
+            bind:value={testMessage}
+            rows="3"
+            placeholder="Message text"
+          ></textarea>
+        </div>
+        {#if testResult}
+          <div
+            class="test-result"
+            class:ok={testResult.ok}
+            class:err={!testResult.ok}
+          >
+            {testResult.message}
+          </div>
+        {/if}
+        <div class="test-dialog-actions">
+          <button
+            class="test-send-btn"
+            onclick={handleTestSend}
+            disabled={testSending || !testMessage.trim()}
+          >
+            {testSending ? "Sending..." : "Send"}
+          </button>
+          <button
+            class="cancel-btn"
+            onclick={() => {
+              testDialogOpen = false;
+            }}>Close</button
+          >
+        </div>
+      </div>
     </div>
   {/if}
 </div>
@@ -463,11 +665,26 @@
     gap: 0.4rem;
     flex-shrink: 0;
   }
-  .edit-btn, .delete-btn, .save-btn {
+  .edit-btn,
+  .delete-btn,
+  .save-btn,
+  .test-btn {
     padding: 0.2rem 0.5rem;
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.8rem;
+  }
+  .test-btn {
+    border: 1px solid #5865f2;
+    background: #fff;
+    color: #5865f2;
+  }
+  .test-btn:hover {
+    background: #eef0ff;
+  }
+  .test-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
   .edit-btn {
     border: 1px solid #ccc;
@@ -506,5 +723,88 @@
     display: flex;
     gap: 0.4rem;
     margin-top: 0.25rem;
+  }
+  /* Test dialog */
+  .dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .test-dialog {
+    background: #fff;
+    border-radius: 8px;
+    padding: 1.25rem;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .test-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .test-dialog-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+  .dialog-close {
+    border: none;
+    background: none;
+    font-size: 1.3rem;
+    cursor: pointer;
+    color: #666;
+    padding: 0.2rem;
+  }
+  .test-dialog textarea {
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    resize: vertical;
+  }
+  .test-dialog-actions {
+    display: flex;
+    gap: 0.4rem;
+    justify-content: flex-end;
+  }
+  .test-send-btn {
+    padding: 0.35rem 1rem;
+    border: 1px solid #333;
+    border-radius: 4px;
+    background: #333;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .test-send-btn:hover:not(:disabled) {
+    background: #555;
+  }
+  .test-send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .test-result {
+    margin-top: 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+  .test-result.ok {
+    background: #f0fdf0;
+    border: 1px solid #86efac;
+    color: #166534;
+  }
+  .test-result.err {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
   }
 </style>

@@ -4,13 +4,7 @@
   import { EditorView } from "prosemirror-view";
   import { keymap } from "prosemirror-keymap";
   import { history, undo, redo } from "prosemirror-history";
-  import {
-    baseKeymap,
-    chainCommands,
-    deleteSelection,
-    joinBackward,
-    selectNodeBackward,
-  } from "prosemirror-commands";
+  import { baseKeymap } from "prosemirror-commands";
   import { templateSchema } from "./schema";
   import VariableMenu from "./VariableMenu.svelte";
 

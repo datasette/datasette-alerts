@@ -9,7 +9,8 @@
   let { tableName, tables, filterParams, onTableChange }: Props = $props();
 
   function formatFilter(pair: string[]): string {
-    const [key, value] = pair;
+    const key = pair[0] ?? "";
+    const value = pair[1] ?? "";
     if (key.includes("__")) {
       const idx = key.lastIndexOf("__");
       const col = key.substring(0, idx);
@@ -56,13 +57,16 @@
 
 {#if filterParams.length > 0}
   <div class="form-field">
+    <!-- svelte-ignore a11y_label_has_associated_control -->
     <label>Filter conditions</label>
     <div class="filter-pills">
       {#each filterParams as pair}
         <span class="filter-pill">{formatFilter(pair)}</span>
       {/each}
     </div>
-    <p class="field-hint">Only rows matching these conditions will trigger notifications.</p>
+    <p class="field-hint">
+      Only rows matching these conditions will trigger notifications.
+    </p>
   </div>
 {/if}
 

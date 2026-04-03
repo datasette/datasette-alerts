@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import createClient from "openapi-fetch";
   import type { paths } from "../../../api.d.ts";
   import { loadPageData } from "../../page_data/load";
@@ -10,7 +11,6 @@
   const client = createClient<paths>({ baseUrl: "/" });
 
   const pageData = loadPageData<NewAlertPageData>();
-  const notifiers = pageData.notifiers ?? [];
   const destinations = (pageData as any).destinations ?? [];
   const database = pageData.database_name;
   const initialFilterParams = pageData.filter_params ?? [];
@@ -96,16 +96,21 @@
   }
 
   fetchTables();
-  if (tableName) {
-    fetchColumns(tableName);
-  }
+  untrack(() => {
+    if (tableName) {
+      fetchColumns(tableName);
+    }
+  });
 
   function onTableChange(newTable: string) {
     tableName = newTable;
     fetchColumns(newTable);
   }
 
-  function handleAddSubscription(destination_id: string, meta: Record<string, any>) {
+  function handleAddSubscription(
+    destination_id: string,
+    meta: Record<string, any>,
+  ) {
     subscriptions = [...subscriptions, { destination_id, meta }];
   }
 
@@ -167,7 +172,9 @@
           onchange={() => (alertType = "cursor")}
         />
         Polling
-        <span class="type-desc">Poll on a schedule, tracking new rows via a timestamp column</span>
+        <span class="type-desc"
+          >Poll on a schedule, tracking new rows via a timestamp column</span
+        >
       </label>
       <label>
         <input
@@ -178,7 +185,9 @@
           onchange={() => (alertType = "trigger")}
         />
         Real-time
-        <span class="type-desc">Instant notifications via a SQLite INSERT trigger</span>
+        <span class="type-desc"
+          >Instant notifications via a SQLite INSERT trigger</span
+        >
       </label>
     </fieldset>
 
@@ -190,14 +199,14 @@
         bind:idColumns
         bind:timestampColumn
         bind:frequency
-        onTableChange={onTableChange}
+        {onTableChange}
       />
     {:else}
       <TriggerFields
         {tableName}
         {tables}
         filterParams={initialFilterParams}
-        onTableChange={onTableChange}
+        {onTableChange}
       />
     {/if}
 
@@ -207,7 +216,11 @@
         {#each subscriptions as sub, i}
           <div class="subscription-item">
             <span class="sub-name">{destinationLabel(sub.destination_id)}</span>
-            <button type="button" class="remove-btn" onclick={() => handleRemoveSubscription(i)}>Remove</button>
+            <button
+              type="button"
+              class="remove-btn"
+              onclick={() => handleRemoveSubscription(i)}>Remove</button
+            >
           </div>
         {/each}
       </fieldset>
@@ -215,7 +228,7 @@
 
     <DestinationPicker
       {destinations}
-      columns={columns.map(c => c.name)}
+      columns={columns.map((c) => c.name)}
       onadd={handleAddSubscription}
     />
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import TemplateEditor from "../../lib/template-editor/TemplateEditor.svelte";
 
   interface DestinationInfo {
@@ -16,13 +17,9 @@
 
   let { destinations, columns, onadd }: Props = $props();
 
-  let selectedId = $state(destinations[0]?.id ?? "");
+  let selectedId = $state(untrack(() => destinations[0]?.id ?? ""));
   let aggregate = $state(true);
   let messageTemplate: any = $state(null);
-
-  const selectedDest = $derived(
-    destinations.find((d) => d.id === selectedId),
-  );
 
   function getTemplateVariables(): string[] {
     if (aggregate) {
@@ -47,7 +44,9 @@
   <legend>Add destination</legend>
 
   {#if destinations.length === 0}
-    <p class="empty">No destinations configured. <a href={`destinations`}>Create one first</a>.</p>
+    <p class="empty">
+      No destinations configured. <a href={`destinations`}>Create one first</a>.
+    </p>
   {:else}
     <ul class="dest-list">
       {#each destinations as dest}
@@ -58,7 +57,9 @@
               name="destination"
               value={dest.id}
               checked={selectedId === dest.id}
-              onchange={() => { selectedId = dest.id; }}
+              onchange={() => {
+                selectedId = dest.id;
+              }}
             />
             <strong>{dest.label}</strong>
             <span class="dest-type">{dest.notifier}</span>
@@ -79,21 +80,28 @@
           />
           Aggregate mode
         </label>
-        <p class="field-description">Send one message per batch instead of one per row</p>
+        <p class="field-description">
+          Send one message per batch instead of one per row
+        </p>
       </div>
 
       <div class="form-field">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label>Message template</label>
         <TemplateEditor
           value={messageTemplate}
           variables={getTemplateVariables()}
-          onchange={(doc) => { messageTemplate = doc; }}
+          onchange={(doc) => {
+            messageTemplate = doc;
+          }}
         />
       </div>
     </div>
 
     <div class="add-action">
-      <button type="button" onclick={handleAdd} disabled={!selectedId}>Add destination</button>
+      <button type="button" onclick={handleAdd} disabled={!selectedId}
+        >Add destination</button
+      >
     </div>
   {/if}
 </fieldset>

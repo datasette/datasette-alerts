@@ -16,23 +16,26 @@ from .bg_task import bg_task
 from .notifier import Notifier, Message, ConfigElement
 from .destinations import send_to_destination, DestinationNotFound, NotifierNotFound
 from .internal_db import InternalDB, NewAlertRouteParameters, NewSubscription
+
 _ = (InternalDB, NewAlertRouteParameters, NewSubscription)
 
 # Import route module to trigger route registration on the shared router
-from . import routes
-from .router import router, ALERTS_ACCESS_NAME
+from . import routes  # noqa: E402
+from .router import router, ALERTS_ACCESS_NAME  # noqa: E402
 
 _ = (routes,)
 
 __all__ = [
     Notifier,
     Message,
+    ConfigElement,
     send_to_destination,
     DestinationNotFound,
     NotifierNotFound,
 ]
 
 pm.add_hookspecs(hookspecs)
+
 
 @hookimpl
 async def startup(datasette):
@@ -73,13 +76,10 @@ def extra_template_vars(datasette):
     return {"datasette_alerts_vite_entry": entry}
 
 
-
 @hookimpl
 def table_actions(datasette, actor, database, table, request):
     async def check():
-        allowed = await datasette.allowed(
-            action=ALERTS_ACCESS_NAME, actor=actor
-        )
+        allowed = await datasette.allowed(action=ALERTS_ACCESS_NAME, actor=actor)
         if allowed:
             # Extract filter params (non-_ params, or params with __ in them)
             filter_args = []
@@ -106,18 +106,15 @@ def table_actions(datasette, actor, database, table, request):
 
     return check
 
+
 @hookimpl
 def database_actions(datasette, actor, database, request):
     async def check():
-        allowed = await datasette.allowed(
-            action=ALERTS_ACCESS_NAME, actor=actor
-        )
+        allowed = await datasette.allowed(action=ALERTS_ACCESS_NAME, actor=actor)
         if allowed:
             return [
                 {
-                    "href": datasette.urls.path(
-                        f"/-/{database}/datasette-alerts"
-                    ),
+                    "href": datasette.urls.path(f"/-/{database}/datasette-alerts"),
                     "label": "Alerts",
                     "description": "View and manage alerts for this database",
                 }

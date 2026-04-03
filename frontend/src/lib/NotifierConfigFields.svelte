@@ -53,6 +53,7 @@
           <p class="field-description">{field.description}</p>
         {/if}
       {:else if field.field_type === "template"}
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label>{field.label}</label>
         <TemplateEditor
           value={meta[field.name] ?? null}
@@ -65,6 +66,7 @@
           <p class="field-description">{field.description}</p>
         {/if}
       {:else}
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label>{field.label}</label>
         <input
           type="text"
