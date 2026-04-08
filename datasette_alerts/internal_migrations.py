@@ -68,3 +68,13 @@ def m003_destinations(db: Database):
             ADD COLUMN destination_id TEXT REFERENCES datasette_alerts_destinations(id);
         """
     )
+
+
+@internal_migrations()
+def m004_custom_alerts(db: Database):
+    db.executescript(
+        """
+          ALTER TABLE datasette_alerts_alerts ADD COLUMN custom_config TEXT DEFAULT '{}';
+          ALTER TABLE datasette_alerts_alerts ADD COLUMN last_check_at TEXT;
+        """
+    )

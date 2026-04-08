@@ -22,6 +22,10 @@ check:
     just check-frontend
     just check-backend
 
+# Testing
+test *flags:
+    uv run pytest {{flags}}
+
 # Type generation
 types-routes:
   uv run python -c 'from datasette_alerts.router import router; import json;print(json.dumps(router.openapi_document_json()))' \
@@ -43,12 +47,14 @@ types-watch:
     --clear -- \
       just types
 
+DEV_PORT := "5689"
+
 # Frontend building
 frontend *flags:
     npm run build --prefix frontend {{flags}}
 
 frontend-dev *flags:
-    npm run dev --prefix frontend -- --port 5179 {{flags}}
+    npm run dev --prefix frontend -- --port {{DEV_PORT}} {{flags}}
 
 # Development servers
 dev *flags:
@@ -56,17 +62,15 @@ dev *flags:
     --with datasette-sidebar \
     --with datasette-debug-gotham \
     --with datasette-write-ui \
-    --with notify-py \
     datasette \
       --root \
-      --plugins-dir=examples/sample-notifiers \
       -s permissions.datasette-alerts-access.id "*" \
       -s permissions.datasette-sidebar-access.id "*" \
       -s permissions.insert-row.id "*" \
       {{flags}}
 
 dev-with-hmr *flags:
-  DATASETTE_ALERTS_VITE_PATH=http://localhost:5179/ \
+  DATASETTE_ALERTS_VITE_PATH=http://localhost:{{DEV_PORT}}/ \
   watchexec \
     --stop-signal SIGKILL \
     --ignore '*.db' \

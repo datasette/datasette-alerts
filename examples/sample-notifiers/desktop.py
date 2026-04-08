@@ -1,3 +1,4 @@
+import asyncio
 from notifypy import Notify
 
 # https://icons.getbootstrap.com/icons/terminal/
@@ -29,7 +30,12 @@ class DesktopNotifier(Notifier):
 
     async def send(self, config: dict, message: Message):
         title = config.get("title", "Datasette Alert")
-        _send_notification(title, message.text)
+        print(f"[desktop] Sending notification: title={title!r} text={message.text!r}")
+        # Run in thread — notifypy.Notify.send() is blocking
+        await asyncio.get_event_loop().run_in_executor(
+            None, _send_notification, title, message.text
+        )
+        print(f"[desktop] Notification sent")
 
 
 def _send_notification(title: str, message: str):

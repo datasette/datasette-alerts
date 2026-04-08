@@ -11,6 +11,7 @@ classifiers=[
 requires-python = ">=3.10"
 dependencies = [
     "datasette>=1.0a19",
+    "datasette-cron>=0.0.1a1",
     "datasette-plugin-router>=0.0.1a2",
     "datasette-vite>=0.0.1a2",
     "pydantic>=2",
@@ -34,7 +35,16 @@ CI = "https://github.com/datasette/datasette-alerts/actions"
 alerts = "datasette_alerts"
 
 [dependency-groups]
-dev = ["pytest", "pytest-asyncio", "ty"]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ty",
+    "datasette-alerts-desktop",
+    "datasette-alerts-discord",
+    "datasette-alerts-ntfy",
+    "datasette-alerts-slack",
+    "datasette-sidebar",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
@@ -46,4 +56,6 @@ datasette_alerts = ["static/**/*", "templates/*", "manifest.json"]
 [tool.setuptools.packages.find]
 exclude = [
     "frontend",
+    "build",
+    "build.*",
 ]

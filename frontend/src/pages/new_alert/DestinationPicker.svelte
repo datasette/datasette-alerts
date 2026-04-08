@@ -134,6 +134,9 @@
       </li>
     {/each}
   </ul>
+  <p class="new-dest-link">
+    <a href={`destinations`}>+ Create new destination</a>
+  </p>
 
   <div class="alert-overrides">
     <div class="form-field">
@@ -198,6 +201,17 @@
 <style>
   .empty {
     color: #666;
+  }
+  .new-dest-link {
+    margin: 0.35rem 0 0;
+    font-size: 0.83rem;
+  }
+  .new-dest-link a {
+    color: #0066cc;
+    text-decoration: none;
+  }
+  .new-dest-link a:hover {
+    text-decoration: underline;
   }
   .dest-list {
     list-style: none;

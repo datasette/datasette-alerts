@@ -5,6 +5,15 @@ from pydantic import BaseModel
 from ulid import ULID
 import json
 
+from .models import (
+    AlertRecord,
+    AlertForCheck,
+    AlertDetail,
+    SubscriptionDetail,
+    AlertLogEntry,
+    AlertCleanupInfo,
+)
+
 
 def ulid_new():
     return str(ULID()).lower()
@@ -42,14 +51,16 @@ class NewSubscription(BaseModel):
 
 class NewAlertRouteParameters(BaseModel):
     database_name: str
-    table_name: str
-    alert_type: str = "cursor"  # "cursor" | "trigger"
+    table_name: str = ""
+    alert_type: str = "cursor"  # "cursor" | "trigger" | "custom:{slug}"
     # Cursor-specific (optional for trigger)
     id_columns: List[str] = []
     timestamp_column: str = ""
     frequency: str = ""
     # Trigger-specific
     filter_params: list[list[str]] = []  # [["col__op", "val"], ...]
+    # Custom alert type config
+    custom_config: dict = {}
     # Shared
     subscriptions: List[NewSubscription] = []
 
@@ -340,7 +351,7 @@ class InternalDB:
 
         return await self.db.execute_write_fn(read)
 
-    async def get_alert_detail(self, alert_id: str) -> dict | None:
+    async def get_alert_detail(self, alert_id: str) -> AlertDetail | None:
         """Fetches full alert details including subscriptions and recent logs."""
 
         def read(conn):
@@ -357,7 +368,9 @@ class InternalDB:
                     a.alert_created_at,
                     cast((julianday(a.next_deadline) - julianday('now')) * 86400 as integer) as seconds_until_next,
                     a.alert_type,
-                    a.filter_params
+                    a.filter_params,
+                    a.custom_config,
+                    a.last_check_at
                   FROM datasette_alerts_alerts a
                   WHERE a.id = ?
                 """,
@@ -388,37 +401,39 @@ class InternalDB:
                 [alert_id],
             ).fetchall()
 
-            return {
-                "id": row[0],
-                "database_name": row[1],
-                "table_name": row[2],
-                "id_columns": json.loads(row[3]) if row[3] else [],
-                "timestamp_column": row[4] or "",
-                "frequency": row[5] or "",
-                "next_deadline": row[6],
-                "alert_created_at": row[7],
-                "seconds_until_next": row[8],
-                "alert_type": row[9] or "cursor",
-                "filter_params": json.loads(row[10]) if row[10] else [],
-                "subscriptions": [
-                    {
-                        "id": s[0],
-                        "notifier": s[4] or s[1],  # prefer dest_notifier
-                        "meta": json.loads(s[2]) if s[2] else {},
-                        "destination_id": s[3],
-                        "destination_label": s[5] or "",
-                    }
+            return AlertDetail(
+                id=row[0],
+                database_name=row[1],
+                table_name=row[2],
+                id_columns=json.loads(row[3]) if row[3] else [],
+                timestamp_column=row[4] or "",
+                frequency=row[5] or "",
+                next_deadline=row[6],
+                alert_created_at=row[7],
+                seconds_until_next=row[8],
+                alert_type=row[9] or "cursor",
+                filter_params=json.loads(row[10]) if row[10] else [],
+                custom_config=row[11] or "{}",
+                last_check_at=row[12],
+                subscriptions=[
+                    SubscriptionDetail(
+                        id=s[0],
+                        notifier=s[4] or s[1],  # prefer dest_notifier
+                        meta=json.loads(s[2]) if s[2] else {},
+                        destination_id=s[3],
+                        destination_label=s[5] or "",
+                    )
                     for s in subs
                 ],
-                "logs": [
-                    {
-                        "logged_at": row[0],
-                        "new_ids": json.loads(row[1]),
-                        "cursor": row[2],
-                    }
-                    for row in logs
+                logs=[
+                    AlertLogEntry(
+                        logged_at=log[0],
+                        new_ids=json.loads(log[1]),
+                        cursor=log[2],
+                    )
+                    for log in logs
                 ],
-            }
+            )
 
         return await self.db.execute_write_fn(read)
 
@@ -450,6 +465,28 @@ class InternalDB:
                             "filter_params": json.dumps(params.filter_params)
                             if params.filter_params
                             else None,
+                        },
+                    ).fetchone()[0]
+                elif params.alert_type.startswith("custom:"):
+                    alert_id = conn.execute(
+                        """
+                          INSERT INTO datasette_alerts_alerts(
+                            id, alert_creator_id, database_name, table_name,
+                            frequency, next_deadline, alert_type, custom_config
+                          )
+                          VALUES (:id, :alert_creator_id, :database_name, :table_name,
+                                  :frequency, datetime('now', :frequency), :alert_type,
+                                  json(:custom_config))
+                          RETURNING id
+                        """,
+                        {
+                            "id": ulid_new(),
+                            "alert_creator_id": "todo",
+                            "database_name": params.database_name,
+                            "table_name": params.table_name or "",
+                            "frequency": params.frequency,
+                            "alert_type": params.alert_type,
+                            "custom_config": json.dumps(params.custom_config),
                         },
                     ).fetchone()[0]
                 else:
@@ -502,7 +539,7 @@ class InternalDB:
 
         return await self.db.execute_write_fn(write)
 
-    async def delete_alert(self, alert_id: str) -> dict | None:
+    async def delete_alert(self, alert_id: str) -> AlertCleanupInfo | None:
         """Delete an alert and its subscriptions/logs. Returns alert info needed for cleanup, or None if not found."""
 
         def write(conn):
@@ -513,11 +550,11 @@ class InternalDB:
                 ).fetchone()
                 if row is None:
                     return None
-                info = {
-                    "alert_type": row[0],
-                    "database_name": row[1],
-                    "table_name": row[2],
-                }
+                info = AlertCleanupInfo(
+                    alert_type=row[0],
+                    database_name=row[1],
+                    table_name=row[2],
+                )
                 conn.execute(
                     "DELETE FROM datasette_alerts_alert_logs WHERE alert_id = ?",
                     [alert_id],
@@ -572,6 +609,84 @@ class InternalDB:
                 conn.execute(
                     "DELETE FROM datasette_alerts_subscriptions WHERE id = ?",
                     [subscription_id],
+                )
+
+        return await self.db.execute_write_fn(write)
+
+    async def get_all_alerts(self) -> list[AlertRecord]:
+        """Return all alerts as AlertRecord objects (for syncing to cron on startup)."""
+
+        def read(conn):
+            rows = conn.execute(
+                """
+                  SELECT id, database_name, table_name, id_columns,
+                         timestamp_column, frequency, alert_type,
+                         custom_config, last_check_at
+                  FROM datasette_alerts_alerts
+                """
+            ).fetchall()
+            return [
+                AlertRecord(
+                    id=row[0],
+                    database_name=row[1],
+                    table_name=row[2],
+                    id_columns=json.loads(row[3]) if row[3] else [],
+                    timestamp_column=row[4] or "",
+                    frequency=row[5] or "",
+                    alert_type=row[6] or "cursor",
+                    custom_config=row[7] or "{}",
+                    last_check_at=row[8],
+                )
+                for row in rows
+            ]
+
+        return await self.db.execute_write_fn(read)
+
+    async def get_alert_for_check(self, alert_id: str) -> AlertForCheck | None:
+        """Fetch a single alert with its last cursor value (for cursor/custom handler)."""
+
+        def read(conn):
+            row = conn.execute(
+                """
+                  SELECT a.id, a.database_name, a.table_name, a.id_columns,
+                         a.timestamp_column, a.frequency, a.alert_type,
+                         a.custom_config, a.last_check_at,
+                         (SELECT cursor FROM datasette_alerts_alert_logs
+                          WHERE alert_id = a.id ORDER BY logged_at DESC LIMIT 1) as cursor
+                  FROM datasette_alerts_alerts a
+                  WHERE a.id = ?
+                """,
+                [alert_id],
+            ).fetchone()
+            if row is None:
+                return None
+            return AlertForCheck(
+                id=row[0],
+                database_name=row[1],
+                table_name=row[2],
+                id_columns=json.loads(row[3]) if row[3] else [],
+                timestamp_column=row[4] or "",
+                frequency=row[5] or "",
+                alert_type=row[6] or "cursor",
+                custom_config=row[7] or "{}",
+                last_check_at=row[8],
+                cursor=row[9] or "",
+            )
+
+        return await self.db.execute_write_fn(read)
+
+    async def update_last_check(self, alert_id: str):
+        """Set last_check_at to now for a custom alert type."""
+
+        def write(conn):
+            with conn:
+                conn.execute(
+                    """
+                      UPDATE datasette_alerts_alerts
+                      SET last_check_at = datetime('now')
+                      WHERE id = ?
+                    """,
+                    (alert_id,),
                 )
 
         return await self.db.execute_write_fn(write)

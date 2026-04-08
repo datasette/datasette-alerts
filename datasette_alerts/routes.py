@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import Annotated
 
 from pydantic import BaseModel
@@ -180,10 +181,10 @@ async def ui_alert_detail(datasette, request, db_name: str, alert_id: str):
     return await render_page(
         datasette,
         request,
-        page_title=f"Alert — {detail['table_name']}",
+        page_title=f"Alert — {detail.table_name}",
         entrypoint="src/pages/alert_detail/index.ts",
         page_data=AlertDetailPageData(
-            **detail, notifiers=notifier_infos, destinations=destination_infos
+            **asdict(detail), notifiers=notifier_infos, destinations=destination_infos
         ),
         breadcrumbs=_alerts_crumbs(datasette, db_name)
         + [
@@ -191,7 +192,7 @@ async def ui_alert_detail(datasette, request, db_name: str, alert_id: str):
                 "href": datasette.urls.path(
                     f"-/{db_name}/datasette-alerts/alerts/{alert_id}"
                 ),
-                "label": detail["table_name"],
+                "label": detail.table_name,
             },
         ],
     )
@@ -270,12 +271,39 @@ async def api_new_alert(
         await create_queue_and_trigger(
             db, alert_id, body.table_name, pk_columns, body.filter_params
         )
+    elif body.alert_type.startswith("custom:"):
+        alert_id = await internal_db.new_alert(body)
     else:
         result = await db.execute(
             f"select max({body.timestamp_column}) from {body.table_name}"
         )
         initial_cursor = result.rows[0][0]
         alert_id = await internal_db.new_alert(body, initial_cursor)
+
+    # Register cron task for the new alert
+    from types import SimpleNamespace
+    from datasette_alerts import _register_cron_task_for_alert
+
+    alert_obj = SimpleNamespace(
+        id=alert_id,
+        alert_type=body.alert_type,
+        frequency=body.frequency,
+    )
+    await _register_cron_task_for_alert(datasette, alert_obj)
+
+    # Ensure trigger drain task exists for trigger alerts
+    if body.alert_type == "trigger":
+        try:
+            scheduler = datasette._cron_scheduler
+            await scheduler.add_task(
+                name="alerts:trigger-drain",
+                handler="alerts:trigger-drain",
+                schedule={"interval": 1},
+                config={},
+                overlap="skip",
+            )
+        except Exception:
+            pass
 
     return Response.json({"ok": True, "data": {"alert_id": alert_id}})
 
@@ -350,13 +378,24 @@ async def api_delete_alert(datasette, request, db_name: str, alert_id: str):
         return Response.json({"ok": False, "error": "Alert not found"}, status=404)
 
     # Drop queue table and trigger if this was a trigger alert
-    if info["alert_type"] == "trigger":
-        db = datasette.databases.get(info["database_name"])
+    if info.alert_type == "trigger":
+        db = datasette.databases.get(info.database_name)
         if db is not None:
             try:
-                await drop_queue_and_trigger(db, alert_id, info["table_name"])
+                await drop_queue_and_trigger(db, alert_id, info.table_name)
             except Exception:
                 pass  # Queue/trigger may already be gone
+
+    # Remove cron task
+    try:
+        scheduler = datasette._cron_scheduler
+        for prefix in ["alerts:cursor:", "alerts:custom:"]:
+            try:
+                await scheduler.remove_task(f"{prefix}{alert_id}")
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     return Response.json({"ok": True})
 
@@ -510,3 +549,25 @@ async def api_test_destination_saved(
         return Response.json({"ok": True})
     except Exception as e:
         return Response.json({"ok": False, "error": str(e)}, status=400)
+
+
+@router.GET(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alert-types$")
+@check_permission()
+async def api_list_alert_types(datasette, request, db_name: str):
+    """List available custom alert types registered by plugins."""
+    from .handlers import _get_alert_types
+
+    alert_types = _get_alert_types(datasette)
+    result = []
+    for slug, at in alert_types.items():
+        info = {
+            "slug": at.slug,
+            "name": at.name,
+            "description": at.description,
+            "icon": at.icon,
+        }
+        ce = at.get_config_element()
+        if ce is not None:
+            info["config_element"] = {"tag": ce.tag, "scripts": ce.scripts}
+        result.append(info)
+    return Response.json({"ok": True, "data": result})

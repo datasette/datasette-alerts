@@ -625,11 +625,11 @@ async def test_alert_detail_includes_destination_info(datasette):
 
     detail = await internal_db.get_alert_detail(alert_id)
     assert detail is not None
-    assert len(detail["subscriptions"]) == 1
-    sub = detail["subscriptions"][0]
-    assert sub["destination_id"] == dest_id
-    assert sub["destination_label"] == "My Slack"
-    assert sub["notifier"] == "slack"
+    assert len(detail.subscriptions) == 1
+    sub = detail.subscriptions[0]
+    assert sub.destination_id == dest_id
+    assert sub.destination_label == "My Slack"
+    assert sub.notifier == "slack"
 
 
 # --- Stage 3: Destination API route tests ---

@@ -24,8 +24,22 @@ def register_routes():
     ]
 
 
+@hookimpl
+def menu_links(datasette, actor):
+    return [
+        {"href": datasette.urls.path("/-/send-message"), "label": "Send Message"},
+    ]
+
+
+def _dest_url(datasette):
+    db_names = [name for name in datasette.databases if name != "_internal"]
+    db_name = db_names[0] if db_names else "_internal"
+    return datasette.urls.path(f"/-/{db_name}/datasette-alerts/destinations")
+
+
 async def send_message_page(datasette, request):
-    return Response.html(PAGE_HTML)
+    dest_url = _dest_url(datasette)
+    return Response.html(PAGE_HTML.replace("__DESTINATIONS_URL__", dest_url))
 
 
 async def list_destinations_api(datasette, request):
@@ -84,14 +98,14 @@ PAGE_HTML = """\
     .result.ok { background: #f0fdf0; border: 1px solid #86efac; color: #166534; }
     .result.err { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
     .empty { color: #666; }
-    .hint { font-size: 0.8rem; color: #666; }
+    .hint { font-size: 0.85rem; color: #666; }
     code { background: #f5f5f5; padding: 0.15rem 0.3rem; border-radius: 3px; font-size: 0.85rem; }
   </style>
 </head>
 <body>
   <h1>Send Message Demo</h1>
   <p class="hint">
-    This page demonstrates the <code>send_to_destination()</code> public API.
+    Demonstrates the <code>send_to_destination()</code> public API.
     Any plugin can send a message to a configured destination without using the alerts system.
   </p>
 
@@ -101,13 +115,14 @@ PAGE_HTML = """\
 
   <script>
     const app = document.getElementById("app");
+    const destUrl = "__DESTINATIONS_URL__";
 
     async function init() {
       const resp = await fetch("/-/send-message/api/destinations");
       const destinations = await resp.json();
 
       if (destinations.length === 0) {
-        app.innerHTML = '<p class="empty">No destinations configured. Create one in the <a href="/-/">destinations UI</a> first.</p>';
+        app.innerHTML = `<p class="empty">No destinations configured yet. <a href="${destUrl}">Create a destination</a> first.</p>`;
         return;
       }
 
@@ -120,9 +135,10 @@ PAGE_HTML = """\
                 `<option value="${d.id}">${d.label} (${d.notifier})</option>`
               ).join("")}
             </select>
+            <span class="hint"><a href="${destUrl}">Manage destinations</a></span>
           </div>
           <div class="form-field">
-            <label for="subject">Subject <span class="hint">(optional, used by ntfy/desktop)</span></label>
+            <label for="subject">Subject <span class="hint">(optional)</span></label>
             <input type="text" id="subject" name="subject" placeholder="e.g. Build Complete" />
           </div>
           <div class="form-field">
