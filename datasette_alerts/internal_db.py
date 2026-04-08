@@ -305,7 +305,7 @@ class InternalDB:
                     a.next_deadline,
                     a.alert_created_at,
                     cast((julianday(a.next_deadline) - julianday('now')) * 86400 as integer) as seconds_until_next,
-                    group_concat(DISTINCT coalesce(d.notifier, s.notifier)) as notifiers,
+                    group_concat(DISTINCT coalesce(d.label, d.notifier, s.notifier)) as destinations,
                     (
                       SELECT max(l.logged_at)
                       FROM datasette_alerts_alert_logs l
@@ -331,7 +331,7 @@ class InternalDB:
                     "next_deadline": row[4],
                     "alert_created_at": row[5],
                     "seconds_until_next": row[6],
-                    "notifiers": row[7] or "",
+                    "destinations": row[7] or "",
                     "last_notification_at": row[8],
                     "alert_type": row[9],
                 }

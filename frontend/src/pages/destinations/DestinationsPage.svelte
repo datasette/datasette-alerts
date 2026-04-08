@@ -52,7 +52,7 @@
   // Create form state
   let showCreateForm = $state(false);
   let createSlug = $state(notifiers[0]?.slug ?? "");
-  let createLabel = $state("");
+  let createLabel = $state("Untitled destination");
   let createConfig: Record<string, any> = $state({});
   let creating = $state(false);
 
@@ -116,7 +116,7 @@
 
   function resetCreateForm() {
     createSlug = notifiers[0]?.slug ?? "";
-    createLabel = "";
+    createLabel = "Untitled destination";
     createConfig = initDefaults(notifiers[0]);
   }
 
@@ -299,24 +299,25 @@
       <div class="form-field">
         <!-- svelte-ignore a11y_label_has_associated_control -->
         <label>Notifier type</label>
-        <div class="notifier-select">
+        <div class="notifier-tiles">
           {#each notifiers as notifier}
-            <label class="notifier-option">
-              <input
-                type="radio"
-                name="create_notifier"
-                value={notifier.slug}
-                checked={createSlug === notifier.slug}
-                onchange={() => {
-                  createSlug = notifier.slug;
-                  createConfig = initDefaults(notifier);
-                }}
-              />
-              {notifier.name}
+            <button
+              type="button"
+              class="notifier-tile"
+              class:selected={createSlug === notifier.slug}
+              onclick={() => {
+                createSlug = notifier.slug;
+                createConfig = initDefaults(notifier);
+              }}
+            >
               {#if notifier.icon}
-                <span class="notifier-icon">{@html notifier.icon}</span>
+                <span class="tile-icon">{@html notifier.icon}</span>
               {/if}
-            </label>
+              <span class="tile-name">{notifier.name}</span>
+              {#if notifier.description}
+                <span class="tile-desc">{notifier.description}</span>
+              {/if}
+            </button>
           {/each}
         </div>
       </div>
@@ -576,16 +577,48 @@
     border-radius: 4px;
     font-size: 0.9rem;
   }
-  .notifier-select {
+  .notifier-tiles {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .notifier-tile {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-  }
-  .notifier-option {
-    display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
+    padding: 0.75rem 0.5rem;
+    flex: 1 1 0;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fff;
     cursor: pointer;
+    text-align: center;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
+  }
+  .notifier-tile:hover {
+    border-color: #b0b0b0;
+    background: #fafafa;
+  }
+  .notifier-tile.selected {
+    border-color: #5865f2;
+    background: #eef0ff;
+  }
+  .tile-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: 1.5rem;
+  }
+  .tile-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .tile-desc {
+    font-size: 0.75rem;
+    color: #999;
+    font-style: italic;
+    line-height: 1.3;
   }
   .notifier-icon {
     display: inline-flex;

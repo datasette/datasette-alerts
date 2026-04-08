@@ -2,6 +2,7 @@
   import { loadPageData } from "../../page_data/load";
   import type { AlertDetailPageData } from "../../page_data/AlertDetailPageData.types";
   import TemplateEditor from "../../lib/template-editor/TemplateEditor.svelte";
+  import TimeAgo from "../../lib/TimeAgo.svelte";
 
   const data = loadPageData<AlertDetailPageData>();
   const alertType = data.alert_type ?? "cursor";
@@ -203,31 +204,18 @@
 <div class="alert-detail">
   <h2>Alert: <code>{data.table_name}</code></h2>
 
-  <dl class="info-grid">
-    <dt>ID</dt>
-    <dd><code>{data.id}</code></dd>
+  <p class="alert-summary">
+    {alertType === "trigger" ? "Real-time" : "Polling"} row alert on
+    <a href={`/${encodeURIComponent(data.database_name)}`}
+      >{data.database_name}</a
+    >/<a
+      href={`/${encodeURIComponent(data.database_name)}/${encodeURIComponent(data.table_name)}`}
+      >{data.table_name}</a
+    >, created <TimeAgo timestamp={data.alert_created_at} />
+  </p>
 
-    <dt>Type</dt>
-    <dd>
-      {alertType === "trigger" ? "Real-time Row Alert" : "Polling Row Alert"}
-    </dd>
-
-    <dt>Database</dt>
-    <dd>
-      <a href={`/${encodeURIComponent(data.database_name)}`}
-        >{data.database_name}</a
-      >
-    </dd>
-
-    <dt>Table</dt>
-    <dd>
-      <a
-        href={`/${encodeURIComponent(data.database_name)}/${encodeURIComponent(data.table_name)}`}
-        ><code>{data.table_name}</code></a
-      >
-    </dd>
-
-    {#if alertType === "cursor"}
+  {#if alertType === "cursor"}
+    <dl class="info-grid">
       <dt>ID columns</dt>
       <dd>{(data.id_columns ?? []).join(", ") || "\u2014"}</dd>
 
@@ -241,33 +229,37 @@
       <dd title={data.next_deadline ?? ""}>
         {formatSeconds(data.seconds_until_next)}
       </dd>
-    {/if}
+    </dl>
+  {/if}
 
-    {#if alertType === "trigger" && filterParams.length > 0}
-      <dt>Filters</dt>
-      <dd>
-        <span class="filter-pills">
-          {#each filterParams as pair}
-            <span class="filter-pill">{formatFilter(pair)}</span>
-          {/each}
-        </span>
-      </dd>
-    {/if}
+  {#if alertType === "trigger" && filterParams.length > 0}
+    <div class="filter-section">
+      <strong>Filters:</strong>
+      <span class="filter-pills">
+        {#each filterParams as pair}
+          <span class="filter-pill">{formatFilter(pair)}</span>
+        {/each}
+      </span>
+    </div>
+  {/if}
 
-    {#if alertType === "trigger"}
-      <dt>Queue</dt>
-      <dd>
-        <a
-          class="queue-link"
-          href={`/${encodeURIComponent(data.database_name)}/_datasette_alerts_queue_${data.id}`}
-          >_datasette_alerts_queue_{data.id}</a
-        >
-      </dd>
-    {/if}
-
-    <dt>Created</dt>
-    <dd>{data.alert_created_at ?? "\u2014"}</dd>
-  </dl>
+  <details class="alert-meta">
+    <summary>Details</summary>
+    <dl class="info-grid">
+      <dt>ID</dt>
+      <dd><code>{data.id}</code></dd>
+      {#if alertType === "trigger"}
+        <dt>Queue</dt>
+        <dd>
+          <a
+            class="queue-link"
+            href={`/${encodeURIComponent(data.database_name)}/_datasette_alerts_queue_${data.id}`}
+            >_datasette_alerts_queue_{data.id}</a
+          >
+        </dd>
+      {/if}
+    </dl>
+  </details>
 
   <h3>Destinations</h3>
   {#if subscriptions.length === 0}
@@ -328,6 +320,7 @@
             <div class="sub-row">
               <div class="sub-info">
                 <strong>{destinationLabel(sub)}</strong>
+                <span class="sub-notifier-badge">{sub.notifier}</span>
                 {#if subscriptionSummary(sub)}
                   <span class="sub-summary">{subscriptionSummary(sub)}</span>
                 {/if}
@@ -422,7 +415,7 @@
       <tbody>
         {#each data.logs as log}
           <tr>
-            <td>{log.logged_at ?? ""}</td>
+            <td><TimeAgo timestamp={log.logged_at} /></td>
             <td>
               {#if (log.new_ids ?? []).length > 0}
                 {(log.new_ids ?? []).length} record{(log.new_ids ?? [])
@@ -455,17 +448,32 @@
     margin: auto;
     padding: 1em;
   }
+  .alert-summary {
+    color: #444;
+    font-size: 0.95rem;
+    margin: 0.25em 0 1em;
+  }
+  .alert-summary a {
+    font-weight: 600;
+  }
   .info-grid {
     display: grid;
     grid-template-columns: 10rem 1fr;
     gap: 0.35rem 1rem;
-    margin: 1em 0;
+    margin: 0.5em 0;
   }
   .info-grid dt {
     font-weight: 600;
   }
   .info-grid dd {
     margin: 0;
+  }
+  .filter-section {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 0.5em 0;
   }
   .filter-pills {
     display: flex;
@@ -480,6 +488,18 @@
     border-radius: 12px;
     font-size: 0.85rem;
     color: #1a4d8f;
+  }
+  .alert-meta {
+    margin: 0.75em 0;
+    font-size: 0.85rem;
+    color: #666;
+  }
+  .alert-meta summary {
+    cursor: pointer;
+    color: #888;
+  }
+  .alert-meta .info-grid {
+    margin-top: 0.5em;
   }
   .queue-link {
     font-size: 0.8rem;
@@ -518,6 +538,13 @@
     gap: 0.5rem;
     flex: 1;
     min-width: 0;
+  }
+  .sub-notifier-badge {
+    font-size: 0.8rem;
+    color: #666;
+    padding: 0.1rem 0.4rem;
+    background: #f0f0f0;
+    border-radius: 8px;
   }
   .sub-summary {
     font-size: 0.85rem;

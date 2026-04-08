@@ -58,7 +58,10 @@
 {#if columns.length > 0}
   <div class="form-field">
     <!-- svelte-ignore a11y_label_has_associated_control -->
-    <label>ID columns</label>
+    <label>Row identity columns</label>
+    <p class="field-hint">
+      Columns that uniquely identify each row. Primary keys are pre-selected.
+    </p>
     <div class="checkbox-group">
       {#each columns as col}
         <label class="checkbox-label">
@@ -73,7 +76,10 @@
     </div>
   </div>
   <div class="form-field">
-    <label for="_timestamp_column">Timestamp column</label>
+    <label for="_timestamp_column">Ordering column</label>
+    <p class="field-hint">
+      Column used to detect new rows since the last check.
+    </p>
     <select id="_timestamp_column" bind:value={timestampColumn} required>
       <option value="" disabled>Select a column</option>
       {#each columns as col}
@@ -83,7 +89,8 @@
   </div>
 {/if}
 <div class="form-field">
-  <label for="_freq_amount">Frequency</label>
+  <label for="_freq_amount">Check interval</label>
+  <p class="field-hint">How often to poll for new rows.</p>
   <div class="freq-row">
     <input
       type="number"
@@ -107,8 +114,13 @@
     flex-direction: column;
     gap: 0.25rem;
   }
-  .form-field label {
+  .form-field > label {
     font-weight: 600;
+  }
+  .field-hint {
+    font-size: 0.8rem;
+    color: #666;
+    margin: 0;
   }
   .form-field input,
   .form-field select {

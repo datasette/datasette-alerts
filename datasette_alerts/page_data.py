@@ -66,7 +66,7 @@ class AlertInfo(BaseModel):
     next_deadline: str | None = None
     seconds_until_next: int | None = None
     alert_created_at: str | None = None
-    notifiers: str = ""
+    destinations: str = ""
     last_notification_at: str | None = None
     alert_type: str = "cursor"
 

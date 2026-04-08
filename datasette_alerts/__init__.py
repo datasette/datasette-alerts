@@ -131,3 +131,22 @@ def register_actions(datasette):
             description="Can access datasette alerts ",
         )
     ]
+
+
+try:
+    from datasette_sidebar.hookspecs import SidebarApp  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
+
+    @hookimpl
+    def datasette_sidebar_apps(datasette):
+        return [
+            SidebarApp(
+                label="Alerts",
+                description="Row alerts and notifications",
+                href=lambda db: f"/-/{db}/datasette-alerts" if db else "/",
+                icon='<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2m.995-14.901a1 1 0 1 0-1.99 0A5 5 0 0 0 3 6c0 1.098-.5 6-2 7h14c-1.5-1-2-5.902-2-7 0-2.42-1.72-4.44-4.005-4.901"/></svg>',
+                color="#e67e22",
+            ),
+        ]
+
+except ImportError:
+    pass

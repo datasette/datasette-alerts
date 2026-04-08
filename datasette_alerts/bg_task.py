@@ -51,9 +51,12 @@ def _build_messages(
         else:
             messages = []
             for row in row_data:
+                variables = {k: str(v) for k, v in row.items()}
+                variables["table_name"] = table_name
+                variables["database_name"] = database_name
                 text = resolve_template(
                     template_json,
-                    {k: str(v) for k, v in row.items()},
+                    variables,
                 )
                 messages.append(Message(text))
             return messages

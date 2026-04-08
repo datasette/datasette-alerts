@@ -1,6 +1,7 @@
 <script lang="ts">
   import { loadPageData } from "../../page_data/load";
   import type { AlertsListPageData } from "../../page_data/AlertsListPageData.types";
+  import TimeAgo from "../../lib/TimeAgo.svelte";
 
   const pageData = loadPageData<AlertsListPageData>();
   const alerts = pageData.alerts ?? [];
@@ -40,9 +41,8 @@
       <thead>
         <tr>
           <th>Alert</th>
-          <th>Table</th>
           <th>Type</th>
-          <th>Notifier</th>
+          <th>Destinations</th>
           <th>Frequency</th>
           <th>Next fire</th>
           <th>Last notification</th>
@@ -54,10 +54,9 @@
             <td
               ><a
                 href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/alerts/${alert.id}`}
-                ><code>{alert.id}</code></a
+                >{alert.table_name}</a
               ></td
             >
-            <td><code>{alert.table_name}</code></td>
             <td>
               <span
                 class="type-badge"
@@ -66,7 +65,7 @@
                 {alert.alert_type === "trigger" ? "Real-time" : "Polling"}
               </span>
             </td>
-            <td>{alert.notifiers}</td>
+            <td>{alert.destinations}</td>
             <td
               >{alert.alert_type === "trigger" ? "\u2014" : alert.frequency}</td
             >
@@ -75,7 +74,7 @@
                 ? "realtime"
                 : formatSeconds(alert.seconds_until_next)}
             </td>
-            <td>{alert.last_notification_at ?? "\u2014"}</td>
+            <td><TimeAgo timestamp={alert.last_notification_at} /></td>
           </tr>
         {/each}
       </tbody>

@@ -55,6 +55,12 @@
   </select>
 </div>
 
+{#if filterParams.length === 0}
+  <p class="field-hint">
+    All new rows inserted into this table will trigger notifications.
+  </p>
+{/if}
+
 {#if filterParams.length > 0}
   <div class="form-field">
     <!-- svelte-ignore a11y_label_has_associated_control -->
