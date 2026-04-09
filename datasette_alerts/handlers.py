@@ -108,7 +108,7 @@ async def _send_for_subscription(
         None,
     )
     if notifier is None:
-        print(f"Notifier not found: {subscription.notifier}")
+        logger.warning("Notifier not found: %s", subscription.notifier)
         return
 
     # Use destination config if available, otherwise fall back to legacy meta
@@ -140,7 +140,7 @@ async def cursor_alert_handler(datasette, config):
 
     db: Database = datasette.databases.get(alert.database_name)
     if db is None:
-        print(f"Database {alert.database_name} not found")
+        logger.warning("Database %s not found", alert.database_name)
         return
 
     cursor = alert.cursor
@@ -156,7 +156,7 @@ async def cursor_alert_handler(datasette, config):
     )
     new_ids = [row[0] for row in result]
     cursor = max([row[1] for row in result], default=cursor)
-    print(alert_id, new_ids, cursor)
+    logger.debug("cursor check: alert=%s new_ids=%s cursor=%s", alert_id, new_ids, cursor)
     await internal_db.add_log(alert_id, new_ids, cursor)
 
     if len(new_ids) > 0:
@@ -173,7 +173,7 @@ async def cursor_alert_handler(datasette, config):
                         db, alert.table_name, alert.id_columns[0], new_ids
                     )
                 except Exception as e:
-                    print(f"Failed to fetch row data: {e}")
+                    logger.warning("Failed to fetch row data: %s", e)
 
             await _send_for_subscription(
                 datasette,
@@ -209,7 +209,7 @@ async def trigger_queue_handler(datasette, config):
 
         new_ids = [item["item_id"] for item in items]
         item_db_ids = [item["id"] for item in items]
-        print(f"trigger {alert.alert_id}: {len(new_ids)} items")
+        logger.debug("trigger %s: %d items", alert.alert_id, len(new_ids))
 
         await internal_db.add_log(alert.alert_id, new_ids, "")
 
@@ -225,7 +225,7 @@ async def trigger_queue_handler(datasette, config):
                             db, alert.table_name, alert.id_columns[0], new_ids
                         )
                     except Exception as e2:
-                        print(f"Failed to fetch row data: {e2}")
+                        logger.warning("Failed to fetch row data: %s", e2)
 
                 await _send_for_subscription(
                     datasette,
@@ -236,7 +236,7 @@ async def trigger_queue_handler(datasette, config):
                     alert.database_name,
                 )
             except Exception as e:
-                print(f"trigger notifier error: {e}")
+                logger.error("trigger notifier error: %s", e)
                 for item_db_id in item_db_ids:
                     await fail_queue_item(
                         db, alert.alert_id, item_db_id, worker_id, str(e)
