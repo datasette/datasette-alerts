@@ -1,11 +1,11 @@
+import asyncio
 from notifypy import Notify
 
 # https://icons.getbootstrap.com/icons/terminal/
 
 from datasette import hookimpl
-from datasette_alerts import Notifier
-from datasette_alerts.template import resolve_template
-from wtforms import Form, StringField, BooleanField
+from datasette_alerts import Notifier, Message
+from wtforms import Form, StringField
 
 
 @hookimpl
@@ -25,44 +25,17 @@ class DesktopNotifier(Notifier):
     async def get_config_form(self):
         class ConfigForm(Form):
             title = StringField("Title")
-            aggregate = BooleanField(
-                "Aggregate mode",
-                description="Send one notification per batch instead of one per row",
-            )
-            message_template = StringField(
-                "Message template",
-                render_kw={
-                    "field_type": "template",
-                    "metadata": {
-                        "aggregate_field": "aggregate",
-                        "aggregate_vars": ["count", "table_name"],
-                    },
-                },
-            )
 
         return ConfigForm
 
-    async def send(self, alert_id, new_ids, config: dict, **kwargs):
+    async def send(self, config: dict, message: Message):
         title = config.get("title", "Datasette Alert")
-        template_json = config.get("message_template")
-        aggregate = config.get("aggregate", True)
-
-        if template_json and isinstance(template_json, dict):
-            if aggregate or not kwargs.get("row_data"):
-                message = resolve_template(template_json, {
-                    "count": str(len(new_ids)),
-                    "table_name": kwargs.get("table_name", ""),
-                })
-                _send_notification(title, message)
-            else:
-                for row in kwargs["row_data"]:
-                    message = resolve_template(
-                        template_json,
-                        {k: str(v) for k, v in row.items()},
-                    )
-                    _send_notification(title, message)
-        else:
-            _send_notification(title, f"{len(new_ids)} new items")
+        print(f"[desktop] Sending notification: title={title!r} text={message.text!r}")
+        # Run in thread — notifypy.Notify.send() is blocking
+        await asyncio.get_event_loop().run_in_executor(
+            None, _send_notification, title, message.text
+        )
+        print(f"[desktop] Notification sent")
 
 
 def _send_notification(title: str, message: str):

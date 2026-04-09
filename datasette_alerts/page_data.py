@@ -11,18 +11,40 @@ class NotifierConfigField(BaseModel):
     metadata: dict = {}
 
 
+class ConfigElementInfo(BaseModel):
+    tag: str
+    scripts: list[str] = []
+
+
 class NotifierInfo(BaseModel):
     slug: str
     name: str
     icon: str = ""
     description: str = ""
     config_fields: list[NotifierConfigField] = []
+    config_element: ConfigElementInfo | None = None
+
+
+class DestinationInfo(BaseModel):
+    id: str
+    notifier: str
+    label: str
+    config: dict = {}
+    created_at: str | None = None
+
+
+# /-/{db_name}/datasette-alerts/destinations — manage destinations
+class DestinationsPageData(BaseModel):
+    database_name: str
+    destinations: list[DestinationInfo] = []
+    notifiers: list[NotifierInfo] = []
 
 
 # /-/{db_name}/datasette-alerts/new — form to create a new alert
 class NewAlertPageData(BaseModel):
     database_name: str
     notifiers: list[NotifierInfo] = []
+    destinations: list[DestinationInfo] = []
     filter_params: list[list[str]] = []
 
 
@@ -44,7 +66,7 @@ class AlertInfo(BaseModel):
     next_deadline: str | None = None
     seconds_until_next: int | None = None
     alert_created_at: str | None = None
-    notifiers: str = ""
+    destinations: str = ""
     last_notification_at: str | None = None
     alert_type: str = "cursor"
 
@@ -59,6 +81,8 @@ class AlertSubscriptionInfo(BaseModel):
     id: str
     notifier: str
     meta: dict = {}
+    destination_id: str | None = None
+    destination_label: str = ""
 
 
 class AlertLogEntry(BaseModel):
@@ -83,6 +107,12 @@ class AlertDetailPageData(BaseModel):
     subscriptions: list[AlertSubscriptionInfo] = []
     logs: list[AlertLogEntry] = []
     notifiers: list[NotifierInfo] = []
+    destinations: list[DestinationInfo] = []
 
 
-__exports__ = [NewAlertPageData, AlertsListPageData, AlertDetailPageData]
+__exports__ = [
+    NewAlertPageData,
+    AlertsListPageData,
+    AlertDetailPageData,
+    DestinationsPageData,
+]

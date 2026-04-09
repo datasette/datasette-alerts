@@ -1,6 +1,7 @@
 <script lang="ts">
   import { loadPageData } from "../../page_data/load";
   import type { AlertsListPageData } from "../../page_data/AlertsListPageData.types";
+  import TimeAgo from "../../lib/TimeAgo.svelte";
 
   const pageData = loadPageData<AlertsListPageData>();
   const alerts = pageData.alerts ?? [];
@@ -18,12 +19,19 @@
 
 <div class="alerts-container">
   <div class="alerts-header">
-    <h2>Alerts</h2>
-    <a
-      class="new-alert-link"
-      href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/new`}
-      >New alert</a
-    >
+    <h2>Row Alerts</h2>
+    <div class="header-actions">
+      <a
+        class="action-link"
+        href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/destinations`}
+        >Destinations</a
+      >
+      <a
+        class="action-link"
+        href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/new`}
+        >New alert</a
+      >
+    </div>
   </div>
 
   {#if alerts.length === 0}
@@ -33,9 +41,8 @@
       <thead>
         <tr>
           <th>Alert</th>
-          <th>Table</th>
           <th>Type</th>
-          <th>Notifier</th>
+          <th>Destinations</th>
           <th>Frequency</th>
           <th>Next fire</th>
           <th>Last notification</th>
@@ -44,19 +51,30 @@
       <tbody>
         {#each alerts as alert}
           <tr>
-            <td><a href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/alerts/${alert.id}`}><code>{alert.id}</code></a></td>
-            <td><code>{alert.table_name}</code></td>
+            <td
+              ><a
+                href={`/-/${encodeURIComponent(dbName)}/datasette-alerts/alerts/${alert.id}`}
+                >{alert.table_name}</a
+              ></td
+            >
             <td>
-              <span class="type-badge" class:trigger={alert.alert_type === "trigger"}>
-                {alert.alert_type === "trigger" ? "trigger" : "cursor"}
+              <span
+                class="type-badge"
+                class:trigger={alert.alert_type === "trigger"}
+              >
+                {alert.alert_type === "trigger" ? "Real-time" : "Polling"}
               </span>
             </td>
-            <td>{alert.notifiers}</td>
-            <td>{alert.alert_type === "trigger" ? "\u2014" : alert.frequency}</td>
+            <td>{alert.destinations}</td>
+            <td
+              >{alert.alert_type === "trigger" ? "\u2014" : alert.frequency}</td
+            >
             <td title={alert.next_deadline ?? ""}>
-              {alert.alert_type === "trigger" ? "realtime" : formatSeconds(alert.seconds_until_next)}
+              {alert.alert_type === "trigger"
+                ? "realtime"
+                : formatSeconds(alert.seconds_until_next)}
             </td>
-            <td>{alert.last_notification_at ?? "\u2014"}</td>
+            <td><TimeAgo timestamp={alert.last_notification_at} /></td>
           </tr>
         {/each}
       </tbody>
@@ -78,14 +96,18 @@
   .alerts-header h2 {
     margin: 0;
   }
-  .new-alert-link {
+  .header-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .action-link {
     padding: 0.4rem 1rem;
     border: 1px solid #ccc;
     border-radius: 4px;
     text-decoration: none;
     color: inherit;
   }
-  .new-alert-link:hover {
+  .action-link:hover {
     background: #f0f0f0;
   }
   .empty {
@@ -101,6 +123,7 @@
     text-align: left;
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #e0e0e0;
+    white-space: nowrap;
   }
   .alerts-table th {
     font-weight: 600;

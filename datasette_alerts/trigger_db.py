@@ -54,6 +54,7 @@ def _filters_to_trigger_when(filter_params: list[list[str]]) -> str:
         # We need to prefix them with NEW.
         # Careful: only replace column refs, not string literals
         import re
+
         # Match "identifier" that is NOT preceded by NEW.
         result = re.sub(r'(?<!NEW\.)"([^"]+)"', r'NEW."\1"', result)
         parts.append(result)
@@ -139,7 +140,8 @@ async def claim_queue_items(
 
     def write(conn):
         with conn:
-            rows = conn.execute(f"""
+            rows = conn.execute(
+                f"""
                 UPDATE [{queue_table}]
                 SET status = 'leased',
                     lease_until = ?,
@@ -154,7 +156,9 @@ async def claim_queue_items(
                     LIMIT ?
                 )
                 RETURNING id, item_id
-            """, [lease_until, worker_id, now, now, limit]).fetchall()
+            """,
+                [lease_until, worker_id, now, now, limit],
+            ).fetchall()
             return [{"id": r[0], "item_id": r[1]} for r in rows]
 
     return await db.execute_write_fn(write)
@@ -174,13 +178,16 @@ async def complete_queue_items(
     def write(conn):
         with conn:
             placeholders = ",".join("?" for _ in item_ids)
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 UPDATE [{queue_table}]
                 SET status = 'completed',
                     completed_at = unixepoch()
                 WHERE id IN ({placeholders})
                   AND leased_by = ?
-            """, [*item_ids, worker_id])
+            """,
+                [*item_ids, worker_id],
+            )
 
     await db.execute_write_fn(write)
 
@@ -199,13 +206,16 @@ async def fail_queue_item(
 
     def write(conn):
         with conn:
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 UPDATE [{queue_table}]
                 SET status = 'failed',
                     last_error = ?,
                     lease_until = ?
                 WHERE id = ?
                   AND leased_by = ?
-            """, [error, lease_until, item_id, worker_id])
+            """,
+                [error, lease_until, item_id, worker_id],
+            )
 
     await db.execute_write_fn(write)

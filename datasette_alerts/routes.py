@@ -1,18 +1,36 @@
+from dataclasses import asdict
 from typing import Annotated
 
 from pydantic import BaseModel
 from datasette import Response
 from datasette_plugin_router import Body
 
-from .internal_db import InternalDB, NewAlertRouteParameters
-from .page_data import AlertDetailPageData, AlertInfo, AlertsListPageData, NewAlertPageData, NewAlertResponse, NotifierConfigField, NotifierInfo
+from .internal_db import InternalDB, NewAlertRouteParameters, NewDestination
+from .notifier import Message
+from .page_data import (
+    AlertDetailPageData,
+    AlertInfo,
+    AlertsListPageData,
+    ConfigElementInfo,
+    DestinationInfo,
+    DestinationsPageData,
+    NewAlertPageData,
+    NewAlertResponse,
+    NotifierConfigField,
+    NotifierInfo,
+)
 from .router import router, check_permission
-from .bg_task import get_notifiers
+from .destinations import get_notifiers, send_to_destination
 from .trigger_db import create_queue_and_trigger, drop_queue_and_trigger
 
 
 async def render_page(
-    datasette, request, *, page_title: str, entrypoint: str, page_data: BaseModel,
+    datasette,
+    request,
+    *,
+    page_title: str,
+    entrypoint: str,
+    page_data: BaseModel,
     breadcrumbs: list[dict] | None = None,
 ) -> Response:
     return Response.html(
@@ -60,6 +78,54 @@ def extract_config_fields(form_class) -> list[NotifierConfigField]:
     return fields
 
 
+async def _build_notifier_infos(datasette) -> list[NotifierInfo]:
+    """Build NotifierInfo list from registered notifiers."""
+    notifiers = await get_notifiers(datasette)
+    infos = []
+    for n in notifiers:
+        config_fields = []
+        config_element = None
+
+        # Check for web component config element first
+        ce = n.get_config_element()
+        if ce is not None:
+            config_element = ConfigElementInfo(tag=ce.tag, scripts=ce.scripts)
+        else:
+            # Fall back to WTForms
+            try:
+                form_class = await n.get_config_form()
+                config_fields = extract_config_fields(form_class)
+            except NotImplementedError:
+                pass
+
+        infos.append(
+            NotifierInfo(
+                slug=n.slug,
+                name=n.name,
+                icon=n.icon,
+                description=n.description,
+                config_fields=config_fields,
+                config_element=config_element,
+            )
+        )
+    return infos
+
+
+async def _build_destination_infos(internal_db: InternalDB) -> list[DestinationInfo]:
+    """Build DestinationInfo list from stored destinations."""
+    dests = await internal_db.list_destinations()
+    return [
+        DestinationInfo(
+            id=d.id,
+            notifier=d.notifier,
+            label=d.label,
+            config=d.config,
+            created_at=d.created_at,
+        )
+        for d in dests
+    ]
+
+
 def _base_crumbs(datasette, db_name: str) -> list[dict]:
     return [
         {"href": datasette.urls.instance(), "label": "home"},
@@ -69,7 +135,10 @@ def _base_crumbs(datasette, db_name: str) -> list[dict]:
 
 def _alerts_crumbs(datasette, db_name: str) -> list[dict]:
     return _base_crumbs(datasette, db_name) + [
-        {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts"), "label": "Alerts"},
+        {
+            "href": datasette.urls.path(f"-/{db_name}/datasette-alerts"),
+            "label": "Alerts",
+        },
     ]
 
 
@@ -106,33 +175,25 @@ async def ui_alert_detail(datasette, request, db_name: str, alert_id: str):
     if detail is None:
         return Response.html("Alert not found", status=404)
 
-    notifiers = await get_notifiers(datasette)
-    notifier_infos = []
-    for n in notifiers:
-        config_fields = []
-        try:
-            form_class = await n.get_config_form()
-            config_fields = extract_config_fields(form_class)
-        except NotImplementedError:
-            pass
-        notifier_infos.append(
-            NotifierInfo(
-                slug=n.slug,
-                name=n.name,
-                icon=n.icon,
-                description=n.description,
-                config_fields=config_fields,
-            )
-        )
+    notifier_infos = await _build_notifier_infos(datasette)
+    destination_infos = await _build_destination_infos(internal_db)
 
     return await render_page(
         datasette,
         request,
-        page_title=f"Alert — {detail['table_name']}",
+        page_title=f"Alert — {detail.table_name}",
         entrypoint="src/pages/alert_detail/index.ts",
-        page_data=AlertDetailPageData(**detail, notifiers=notifier_infos),
-        breadcrumbs=_alerts_crumbs(datasette, db_name) + [
-            {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts/alerts/{alert_id}"), "label": detail["table_name"]},
+        page_data=AlertDetailPageData(
+            **asdict(detail), notifiers=notifier_infos, destinations=destination_infos
+        ),
+        breadcrumbs=_alerts_crumbs(datasette, db_name)
+        + [
+            {
+                "href": datasette.urls.path(
+                    f"-/{db_name}/datasette-alerts/alerts/{alert_id}"
+                ),
+                "label": detail.table_name,
+            },
         ],
     )
 
@@ -144,24 +205,10 @@ async def ui_new_alert(datasette, request, db_name: str):
     if db is None:
         return Response.html("Database not found", status=404)
 
-    notifiers = await get_notifiers(datasette)
-    notifier_infos = []
-    for n in notifiers:
-        config_fields = []
-        try:
-            form_class = await n.get_config_form()
-            config_fields = extract_config_fields(form_class)
-        except NotImplementedError:
-            pass
-        notifier_infos.append(
-            NotifierInfo(
-                slug=n.slug,
-                name=n.name,
-                icon=n.icon,
-                description=n.description,
-                config_fields=config_fields,
-            )
-        )
+    internal_db = InternalDB(datasette.get_internal_database())
+    notifier_infos = await _build_notifier_infos(datasette)
+    destination_infos = await _build_destination_infos(internal_db)
+
     # Extract filter params from URL (non-_ params, or params with __ in them)
     filter_params = []
     for key in request.args:
@@ -180,15 +227,22 @@ async def ui_new_alert(datasette, request, db_name: str):
         page_data=NewAlertPageData(
             database_name=db_name,
             notifiers=notifier_infos,
+            destinations=destination_infos,
             filter_params=filter_params,
         ),
-        breadcrumbs=_alerts_crumbs(datasette, db_name) + [
-            {"href": datasette.urls.path(f"-/{db_name}/datasette-alerts/new"), "label": "New Alert"},
+        breadcrumbs=_alerts_crumbs(datasette, db_name)
+        + [
+            {
+                "href": datasette.urls.path(f"-/{db_name}/datasette-alerts/new"),
+                "label": "New Alert",
+            },
         ],
     )
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/new$", output=NewAlertResponse)
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/new$", output=NewAlertResponse
+)
 @check_permission()
 async def api_new_alert(
     datasette, request, db_name: str, body: Annotated[NewAlertRouteParameters, Body()]
@@ -217,6 +271,8 @@ async def api_new_alert(
         await create_queue_and_trigger(
             db, alert_id, body.table_name, pk_columns, body.filter_params
         )
+    elif body.alert_type.startswith("custom:"):
+        alert_id = await internal_db.new_alert(body)
     else:
         result = await db.execute(
             f"select max({body.timestamp_column}) from {body.table_name}"
@@ -224,11 +280,36 @@ async def api_new_alert(
         initial_cursor = result.rows[0][0]
         alert_id = await internal_db.new_alert(body, initial_cursor)
 
+    # Register cron task for the new alert
+    from types import SimpleNamespace
+    from datasette_alerts import _register_cron_task_for_alert
+
+    alert_obj = SimpleNamespace(
+        id=alert_id,
+        alert_type=body.alert_type,
+        frequency=body.frequency,
+    )
+    await _register_cron_task_for_alert(datasette, alert_obj)
+
+    # Ensure trigger drain task exists for trigger alerts
+    if body.alert_type == "trigger":
+        try:
+            scheduler = datasette._cron_scheduler
+            await scheduler.add_task(
+                name="alerts:trigger-drain",
+                handler="alerts:trigger-drain",
+                schedule={"interval": 1},
+                config={},
+                overlap="skip",
+            )
+        except Exception:
+            pass
+
     return Response.json({"ok": True, "data": {"alert_id": alert_id}})
 
 
 class AddSubscriptionBody(BaseModel):
-    notifier_slug: str
+    destination_id: str
     meta: dict = {}
 
 
@@ -236,30 +317,47 @@ class UpdateSubscriptionBody(BaseModel):
     meta: dict = {}
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions$")
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions$"
+)
 @check_permission()
 async def api_add_subscription(
-    datasette, request, db_name: str, alert_id: str, body: Annotated[AddSubscriptionBody, Body()]
+    datasette,
+    request,
+    db_name: str,
+    alert_id: str,
+    body: Annotated[AddSubscriptionBody, Body()],
 ):
     internal_db = InternalDB(datasette.get_internal_database())
     detail = await internal_db.get_alert_detail(alert_id)
     if detail is None:
         return Response.json({"ok": False, "error": "Alert not found"}, status=404)
-    sub_id = await internal_db.add_subscription(alert_id, body.notifier_slug, body.meta)
+    sub_id = await internal_db.add_subscription(
+        alert_id, body.destination_id, body.meta
+    )
     return Response.json({"ok": True, "data": {"subscription_id": sub_id}})
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions/(?P<sub_id>[^/]+)/update$")
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions/(?P<sub_id>[^/]+)/update$"
+)
 @check_permission()
 async def api_update_subscription(
-    datasette, request, db_name: str, alert_id: str, sub_id: str, body: Annotated[UpdateSubscriptionBody, Body()]
+    datasette,
+    request,
+    db_name: str,
+    alert_id: str,
+    sub_id: str,
+    body: Annotated[UpdateSubscriptionBody, Body()],
 ):
     internal_db = InternalDB(datasette.get_internal_database())
     await internal_db.update_subscription(sub_id, body.meta)
     return Response.json({"ok": True})
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions/(?P<sub_id>[^/]+)/delete$")
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/subscriptions/(?P<sub_id>[^/]+)/delete$"
+)
 @check_permission()
 async def api_delete_subscription(
     datasette, request, db_name: str, alert_id: str, sub_id: str
@@ -269,7 +367,9 @@ async def api_delete_subscription(
     return Response.json({"ok": True})
 
 
-@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/delete$")
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alerts/(?P<alert_id>[^/]+)/delete$"
+)
 @check_permission()
 async def api_delete_alert(datasette, request, db_name: str, alert_id: str):
     internal_db = InternalDB(datasette.get_internal_database())
@@ -278,12 +378,196 @@ async def api_delete_alert(datasette, request, db_name: str, alert_id: str):
         return Response.json({"ok": False, "error": "Alert not found"}, status=404)
 
     # Drop queue table and trigger if this was a trigger alert
-    if info["alert_type"] == "trigger":
-        db = datasette.databases.get(info["database_name"])
+    if info.alert_type == "trigger":
+        db = datasette.databases.get(info.database_name)
         if db is not None:
             try:
-                await drop_queue_and_trigger(db, alert_id, info["table_name"])
+                await drop_queue_and_trigger(db, alert_id, info.table_name)
             except Exception:
                 pass  # Queue/trigger may already be gone
 
+    # Remove cron task
+    try:
+        scheduler = datasette._cron_scheduler
+        for prefix in ["alerts:cursor:", "alerts:custom:"]:
+            try:
+                await scheduler.remove_task(f"{prefix}{alert_id}")
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     return Response.json({"ok": True})
+
+
+# --- Destination routes ---
+
+
+@router.GET(r"/-/(?P<db_name>[^/]+)/datasette-alerts/destinations$")
+@check_permission()
+async def ui_destinations_list(datasette, request, db_name: str):
+    db = datasette.databases.get(db_name)
+    if db is None:
+        return Response.html("Database not found", status=404)
+
+    internal_db = InternalDB(datasette.get_internal_database())
+    notifier_infos = await _build_notifier_infos(datasette)
+    destination_infos = await _build_destination_infos(internal_db)
+
+    return await render_page(
+        datasette,
+        request,
+        page_title=f"Destinations — {db_name}",
+        entrypoint="src/pages/destinations/index.ts",
+        page_data=DestinationsPageData(
+            database_name=db_name,
+            destinations=destination_infos,
+            notifiers=notifier_infos,
+        ),
+        breadcrumbs=_alerts_crumbs(datasette, db_name)
+        + [
+            {
+                "href": datasette.urls.path(
+                    f"-/{db_name}/datasette-alerts/destinations"
+                ),
+                "label": "Destinations",
+            },
+        ],
+    )
+
+
+class NewDestinationBody(BaseModel):
+    notifier: str
+    label: str
+    config: dict = {}
+
+
+class UpdateDestinationBody(BaseModel):
+    label: str
+    config: dict = {}
+
+
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/new$")
+@check_permission()
+async def api_new_destination(
+    datasette, request, db_name: str, body: Annotated[NewDestinationBody, Body()]
+):
+    internal_db = InternalDB(datasette.get_internal_database())
+    created_by = request.actor.get("id") if request.actor else None
+    dest_id = await internal_db.create_destination(
+        NewDestination(notifier=body.notifier, label=body.label, config=body.config),
+        created_by=created_by,
+    )
+    return Response.json({"ok": True, "data": {"destination_id": dest_id}})
+
+
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/(?P<dest_id>[^/]+)/update$"
+)
+@check_permission()
+async def api_update_destination(
+    datasette,
+    request,
+    db_name: str,
+    dest_id: str,
+    body: Annotated[UpdateDestinationBody, Body()],
+):
+    internal_db = InternalDB(datasette.get_internal_database())
+    dest = await internal_db.get_destination(dest_id)
+    if dest is None:
+        return Response.json(
+            {"ok": False, "error": "Destination not found"}, status=404
+        )
+    await internal_db.update_destination(dest_id, body.label, body.config)
+    return Response.json({"ok": True})
+
+
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/(?P<dest_id>[^/]+)/delete$"
+)
+@check_permission()
+async def api_delete_destination(datasette, request, db_name: str, dest_id: str):
+    internal_db = InternalDB(datasette.get_internal_database())
+    dest = await internal_db.get_destination(dest_id)
+    if dest is None:
+        return Response.json(
+            {"ok": False, "error": "Destination not found"}, status=404
+        )
+    await internal_db.delete_destination(dest_id)
+    return Response.json({"ok": True})
+
+
+class TestDestinationBody(BaseModel):
+    notifier: str
+    config: dict = {}
+    text: str = "Test message from Datasette Alerts"
+    subject: str = "Destination Test"
+
+
+class TestSavedDestinationBody(BaseModel):
+    text: str = "Test message from Datasette Alerts"
+    subject: str = "Destination Test"
+
+
+@router.POST(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/test$")
+@check_permission()
+async def api_test_destination_transient(
+    datasette, request, db_name: str, body: Annotated[TestDestinationBody, Body()]
+):
+    """Test a destination config without saving it. Sends a real test message."""
+    notifiers = await get_notifiers(datasette)
+    notifier = next((n for n in notifiers if n.slug == body.notifier), None)
+    if notifier is None:
+        return Response.json(
+            {"ok": False, "error": f"Notifier {body.notifier!r} not found"}, status=404
+        )
+    try:
+        await notifier.send(
+            body.config, Message(body.text, subject=body.subject or None)
+        )
+        return Response.json({"ok": True})
+    except Exception as e:
+        return Response.json({"ok": False, "error": str(e)}, status=400)
+
+
+@router.POST(
+    r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/destinations/(?P<dest_id>[^/]+)/test$"
+)
+@check_permission()
+async def api_test_destination_saved(
+    datasette,
+    request,
+    db_name: str,
+    dest_id: str,
+    body: Annotated[TestSavedDestinationBody, Body()],
+):
+    """Test a saved destination by sending a real test message."""
+    try:
+        await send_to_destination(
+            datasette, dest_id, Message(body.text, subject=body.subject or None)
+        )
+        return Response.json({"ok": True})
+    except Exception as e:
+        return Response.json({"ok": False, "error": str(e)}, status=400)
+
+
+@router.GET(r"/-/(?P<db_name>[^/]+)/datasette-alerts/api/alert-types$")
+@check_permission()
+async def api_list_alert_types(datasette, request, db_name: str):
+    """List available custom alert types registered by plugins."""
+    from .handlers import _get_alert_types
+
+    alert_types = _get_alert_types(datasette)
+    result = []
+    for slug, at in alert_types.items():
+        info = {
+            "slug": at.slug,
+            "name": at.name,
+            "description": at.description,
+            "icon": at.icon,
+        }
+        ce = at.get_config_element()
+        if ce is not None:
+            info["config_element"] = {"tag": ce.tag, "scripts": ce.scripts}
+        result.append(info)
+    return Response.json({"ok": True, "data": result})

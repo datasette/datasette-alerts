@@ -17,12 +17,10 @@ async function compileSchemaFile(file: string) {
 // https://vite.dev/config/
 export default defineConfig({
   server: {
-    port: 5179,
     strictPort: true,
     cors: true,
     hmr: {
       host: "localhost",
-      port: 5179,
       protocol: "ws",
     },
   },
@@ -62,6 +60,7 @@ export default defineConfig({
         new_alert: "src/pages/new_alert/index.ts",
         alerts_list: "src/pages/alerts_list/index.ts",
         alert_detail: "src/pages/alert_detail/index.ts",
+        destinations: "src/pages/destinations/index.ts",
       },
     },
   },
