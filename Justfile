@@ -70,7 +70,6 @@ dev *flags:
       {{flags}}
 
 dev-with-hmr *flags:
-  DATASETTE_ALERTS_VITE_PATH=http://localhost:{{DEV_PORT}}/ \
   watchexec \
     --stop-signal SIGKILL \
     --ignore '*.db' \
@@ -79,4 +78,6 @@ dev-with-hmr *flags:
     -e py,html \
     --restart \
     --clear -- \
-    just dev {{flags}}
+    just dev \
+      -s plugins.datasette-vite.dev_ports.datasette_alerts {{DEV_PORT}} \
+      {{flags}}
