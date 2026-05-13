@@ -11,9 +11,9 @@ classifiers=[
 requires-python = ">=3.10"
 dependencies = [
     "datasette>=1.0a28",
-    "datasette-cron>=0.0.1a1",
+    "datasette-cron>=0.0.1a2",
     "datasette-plugin-router>=0.0.1a2",
-    "datasette-vite>=0.0.1a2",
+    "datasette-vite>=0.0.1a4",
     "pydantic>=2",
     "python-ulid>=3",
     "sqlite-migrate>=0.1b0",
@@ -43,7 +43,7 @@ dev = [
     "datasette-alerts-discord",
     "datasette-alerts-ntfy",
     "datasette-alerts-slack",
-    "datasette-sidebar",
+    "datasette-sidebar>=0.0.1a3",
 ]
 
 [tool.pytest.ini_options]

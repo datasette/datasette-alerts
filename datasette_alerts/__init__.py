@@ -3,7 +3,6 @@ from datasette import hookimpl
 from .internal_migrations import internal_migrations
 from sqlite_utils import Database
 from urllib.parse import urlencode
-import os
 
 from . import hookspecs
 
@@ -144,7 +143,6 @@ def extra_template_vars(datasette):
     entry = vite_entry(
         datasette=datasette,
         plugin_package="datasette_alerts",
-        vite_dev_path=os.environ.get("DATASETTE_ALERTS_VITE_PATH"),
     )
     return {"datasette_alerts_vite_entry": entry}
 
