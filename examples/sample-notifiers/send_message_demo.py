@@ -46,10 +46,9 @@ async def list_destinations_api(datasette, request):
     """Return all destinations as JSON for the frontend dropdown."""
     internal_db = InternalDB(datasette.get_internal_database())
     dests = await internal_db.list_destinations()
-    return Response.json([
-        {"id": d.id, "notifier": d.notifier, "label": d.label}
-        for d in dests
-    ])
+    return Response.json(
+        [{"id": d.id, "notifier": d.notifier, "label": d.label} for d in dests]
+    )
 
 
 async def send_message_api(datasette, request):
@@ -63,12 +62,16 @@ async def send_message_api(datasette, request):
     subject = body.get("subject", "").strip() or None
 
     if not destination_id:
-        return Response.json({"ok": False, "error": "destination_id is required"}, status=400)
+        return Response.json(
+            {"ok": False, "error": "destination_id is required"}, status=400
+        )
     if not text:
         return Response.json({"ok": False, "error": "text is required"}, status=400)
 
     try:
-        await send_to_destination(datasette, destination_id, Message(text, subject=subject))
+        await send_to_destination(
+            datasette, destination_id, Message(text, subject=subject)
+        )
         return Response.json({"ok": True})
     except Exception as e:
         return Response.json({"ok": False, "error": str(e)}, status=400)

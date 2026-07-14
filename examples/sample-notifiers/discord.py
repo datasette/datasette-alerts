@@ -16,6 +16,7 @@ def datasette_alerts_register_notifiers(datasette):
 @hookimpl
 def startup(datasette):
     """Create the internal discord channels table on startup."""
+
     async def _create_table():
         db = datasette.get_internal_database()
         await db.execute_write("""
@@ -26,6 +27,7 @@ def startup(datasette):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
     return _create_table
 
 
@@ -34,7 +36,10 @@ def register_routes():
     return [
         (r"^/-/datasette-alerts-discord/api/channels$", channels_api),
         (r"^/-/datasette-alerts-discord/api/channels/new$", channels_new_api),
-        (r"^/-/datasette-alerts-discord/api/channels/(?P<channel_id>\d+)/delete$", channels_delete_api),
+        (
+            r"^/-/datasette-alerts-discord/api/channels/(?P<channel_id>\d+)/delete$",
+            channels_delete_api,
+        ),
         (r"^/-/datasette-alerts-discord/config\.js$", config_js),
     ]
 
@@ -42,7 +47,9 @@ def register_routes():
 async def channels_api(datasette, request):
     """List all stored Discord channels."""
     db = datasette.get_internal_database()
-    result = await db.execute("SELECT id, name, webhook_url, created_at FROM datasette_alerts_discord_channels ORDER BY name")
+    result = await db.execute(
+        "SELECT id, name, webhook_url, created_at FROM datasette_alerts_discord_channels ORDER BY name"
+    )
     channels = [
         {"id": row[0], "name": row[1], "webhook_url": row[2], "created_at": row[3]}
         for row in result.rows
@@ -58,7 +65,9 @@ async def channels_new_api(datasette, request):
     name = body.get("name", "").strip()
     webhook_url = body.get("webhook_url", "").strip()
     if not name or not webhook_url:
-        return Response.json({"ok": False, "error": "name and webhook_url required"}, status=400)
+        return Response.json(
+            {"ok": False, "error": "name and webhook_url required"}, status=400
+        )
     db = datasette.get_internal_database()
     await db.execute_write(
         "INSERT INTO datasette_alerts_discord_channels(name, webhook_url) VALUES (?, ?)",

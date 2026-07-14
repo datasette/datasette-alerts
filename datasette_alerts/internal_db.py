@@ -259,8 +259,7 @@ class InternalDB:
 
         def write(conn) -> List[ReadyJob]:
             with conn:
-                rows = conn.execute(
-                    """
+                rows = conn.execute("""
                       UPDATE datasette_alerts_alerts
                       SET current_schedule_started_at = datetime('now')
                       WHERE next_deadline <= datetime('now')
@@ -272,8 +271,7 @@ class InternalDB:
                         table_name,
                         id_columns,
                         timestamp_column
-                    """
-                ).fetchall()
+                    """).fetchall()
 
                 jobs = []
                 for row in rows:
@@ -462,9 +460,11 @@ class InternalDB:
                             "table_name": params.table_name,
                             "id_columns": json.dumps(params.id_columns),
                             "alert_type": "trigger",
-                            "filter_params": json.dumps(params.filter_params)
-                            if params.filter_params
-                            else None,
+                            "filter_params": (
+                                json.dumps(params.filter_params)
+                                if params.filter_params
+                                else None
+                            ),
                         },
                     ).fetchone()[0]
                 elif params.alert_type.startswith("custom:"):
@@ -617,14 +617,12 @@ class InternalDB:
         """Return all alerts as AlertRecord objects (for syncing to cron on startup)."""
 
         def read(conn):
-            rows = conn.execute(
-                """
+            rows = conn.execute("""
                   SELECT id, database_name, table_name, id_columns,
                          timestamp_column, frequency, alert_type,
                          custom_config, last_check_at
                   FROM datasette_alerts_alerts
-                """
-            ).fetchall()
+                """).fetchall()
             return [
                 AlertRecord(
                     id=row[0],
@@ -695,13 +693,11 @@ class InternalDB:
         """Return all trigger-type alerts."""
 
         def read(conn):
-            rows = conn.execute(
-                """
+            rows = conn.execute("""
                   SELECT id, database_name, table_name, id_columns
                   FROM datasette_alerts_alerts
                   WHERE alert_type = 'trigger'
-                """
-            ).fetchall()
+                """).fetchall()
             return [
                 TriggerAlert(
                     alert_id=row[0],

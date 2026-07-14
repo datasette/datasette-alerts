@@ -23,7 +23,6 @@ from datasette_alerts import (
 from datasette_alerts.handlers import _get_alert_types, custom_alert_handler
 from datasette_alerts.internal_db import NewDestination
 
-
 # ---------------------------------------------------------------------------
 # Mock AlertType
 # ---------------------------------------------------------------------------
@@ -112,15 +111,13 @@ async def datasette_instance(tmp_path):
     data = str(tmp_path / "data.db")
     db = sqlite3.connect(data)
     with db:
-        db.execute(
-            """
+        db.execute("""
             CREATE TABLE events (
                 id INTEGER PRIMARY KEY,
                 title TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-            """
-        )
+            """)
         db.execute(
             "INSERT INTO events (title, created_at) VALUES ('Event 1', '2024-01-01 10:00:00')"
         )
@@ -178,18 +175,14 @@ async def test_api_create_custom_alert(datasette_instance, internal_db):
         )
     )
 
-    cookies = {
-        "ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")
-    }
+    cookies = {"ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")}
     payload = {
         "database_name": "data",
         "table_name": "",
         "alert_type": "custom:test-type",
         "frequency": "+5 minutes",
         "custom_config": {"committee_id": "C001234", "threshold": 1000},
-        "subscriptions": [
-            {"destination_id": dest_id, "meta": {"aggregate": True}}
-        ],
+        "subscriptions": [{"destination_id": dest_id, "meta": {"aggregate": True}}],
     }
 
     response = await datasette_instance.client.post(
@@ -224,9 +217,7 @@ async def test_api_create_custom_alert(datasette_instance, internal_db):
 @pytest.mark.asyncio
 async def test_api_list_alert_types(datasette_instance):
     """Registered AlertType appears in the api/alert-types endpoint."""
-    cookies = {
-        "ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")
-    }
+    cookies = {"ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")}
     response = await datasette_instance.client.get(
         "/-/data/datasette-alerts/api/alert-types", cookies=cookies
     )
@@ -270,9 +261,7 @@ async def test_custom_alert_handler_calls_check_and_sends(
         alert_type="custom:test-type",
         frequency="+5 minutes",
         custom_config={"key": "value"},
-        subscriptions=[
-            NewSubscription(destination_id=dest_id, meta={})
-        ],
+        subscriptions=[NewSubscription(destination_id=dest_id, meta={})],
     )
     alert_id = await internal_db.new_alert(params)
 
@@ -289,7 +278,9 @@ async def test_custom_alert_handler_calls_check_and_sends(
 
     # Message was sent to notifier
     assert len(_test_notifier_instance.sent_messages) == 1
-    assert _test_notifier_instance.sent_messages[0]["message"].text == "test alert fired"
+    assert (
+        _test_notifier_instance.sent_messages[0]["message"].text == "test alert fired"
+    )
     assert _test_notifier_instance.sent_messages[0]["config"] == {
         "url": "https://hook.example.com"
     }
@@ -315,9 +306,7 @@ async def test_custom_alert_handler_no_messages(datasette_instance, internal_db)
     empty_at = EmptyAlertType()
 
     dest_id = await internal_db.create_destination(
-        NewDestination(
-            notifier="custom-test-notifier", label="Empty Test", config={}
-        )
+        NewDestination(notifier="custom-test-notifier", label="Empty Test", config={})
     )
     params = NewAlertRouteParameters(
         database_name="data",
@@ -325,9 +314,7 @@ async def test_custom_alert_handler_no_messages(datasette_instance, internal_db)
         alert_type="custom:empty-type",
         frequency="+5 minutes",
         custom_config={},
-        subscriptions=[
-            NewSubscription(destination_id=dest_id, meta={})
-        ],
+        subscriptions=[NewSubscription(destination_id=dest_id, meta={})],
     )
     alert_id = await internal_db.new_alert(params)
 
@@ -357,9 +344,7 @@ async def test_custom_alert_handler_unknown_type(datasette_instance, internal_db
     alert_id = await internal_db.new_alert(params)
 
     # Should not raise
-    with patch(
-        "datasette_alerts.handlers._get_alert_types", return_value={}
-    ):
+    with patch("datasette_alerts.handlers._get_alert_types", return_value={}):
         await custom_alert_handler(
             datasette_instance,
             {"alert_id": alert_id, "type_slug": "unknown-slug"},
@@ -489,9 +474,7 @@ async def test_delete_custom_alert_db(datasette_instance, internal_db):
         alert_type="custom:test-type",
         frequency="+5 minutes",
         custom_config={"x": 1},
-        subscriptions=[
-            NewSubscription(destination_id=dest_id, meta={})
-        ],
+        subscriptions=[NewSubscription(destination_id=dest_id, meta={})],
     )
     alert_id = await internal_db.new_alert(params)
 
@@ -526,9 +509,7 @@ async def test_api_delete_custom_alert(datasette_instance, internal_db):
     dest_id = await internal_db.create_destination(
         NewDestination(notifier="custom-test-notifier", label="Del API", config={})
     )
-    cookies = {
-        "ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")
-    }
+    cookies = {"ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")}
     create_response = await datasette_instance.client.post(
         "/-/data/datasette-alerts/api/new",
         json={
@@ -569,9 +550,7 @@ async def test_api_delete_custom_alert(datasette_instance, internal_db):
 @pytest.mark.asyncio
 async def test_delete_alert_not_found(datasette_instance):
     """Deleting a nonexistent alert returns 404."""
-    cookies = {
-        "ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")
-    }
+    cookies = {"ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")}
     response = await datasette_instance.client.post(
         "/-/data/datasette-alerts/api/alerts/nonexistent/delete",
         json={},
@@ -647,18 +626,14 @@ async def test_cron_task_registered_on_custom_alert_create(
         )
     )
 
-    cookies = {
-        "ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")
-    }
+    cookies = {"ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")}
     payload = {
         "database_name": "data",
         "table_name": "",
         "alert_type": "custom:test-type",
         "frequency": "+5 minutes",
         "custom_config": {"key": "val"},
-        "subscriptions": [
-            {"destination_id": dest_id, "meta": {}}
-        ],
+        "subscriptions": [{"destination_id": dest_id, "meta": {}}],
     }
 
     response = await datasette_instance.client.post(
@@ -672,21 +647,19 @@ async def test_cron_task_registered_on_custom_alert_create(
     task = await scheduler.internal_db.get_task(task_name)
     assert task is not None
     assert task.handler == "alerts:custom-check"
-    task_config = json.loads(task.config) if isinstance(task.config, str) else task.config
+    task_config = (
+        json.loads(task.config) if isinstance(task.config, str) else task.config
+    )
     assert task_config == {"alert_id": alert_id, "type_slug": "test-type"}
     assert task.overlap_policy == "skip"
 
 
 @pytest.mark.asyncio
-async def test_cron_task_registered_for_cursor_alert(
-    datasette_instance, internal_db
-):
+async def test_cron_task_registered_for_cursor_alert(datasette_instance, internal_db):
     """Creating a cursor alert via API registers a cron task."""
     scheduler = datasette_instance._cron_scheduler
 
-    cookies = {
-        "ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")
-    }
+    cookies = {"ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")}
     payload = {
         "database_name": "data",
         "table_name": "events",
@@ -707,7 +680,9 @@ async def test_cron_task_registered_for_cursor_alert(
     task = await scheduler.internal_db.get_task(task_name)
     assert task is not None
     assert task.handler == "alerts:cursor-check"
-    task_config = json.loads(task.config) if isinstance(task.config, str) else task.config
+    task_config = (
+        json.loads(task.config) if isinstance(task.config, str) else task.config
+    )
     assert task_config == {"alert_id": alert_id}
 
 
@@ -786,9 +761,7 @@ async def test_handler_passes_last_check_at_on_second_call(
     _test_notifier_instance.sent_messages.clear()
 
     dest_id = await internal_db.create_destination(
-        NewDestination(
-            notifier="custom-test-notifier", label="2nd call", config={}
-        )
+        NewDestination(notifier="custom-test-notifier", label="2nd call", config={})
     )
     params = NewAlertRouteParameters(
         database_name="data",
@@ -796,9 +769,7 @@ async def test_handler_passes_last_check_at_on_second_call(
         alert_type="custom:test-type",
         frequency="+5 minutes",
         custom_config={"repeat": True},
-        subscriptions=[
-            NewSubscription(destination_id=dest_id, meta={})
-        ],
+        subscriptions=[NewSubscription(destination_id=dest_id, meta={})],
     )
     alert_id = await internal_db.new_alert(params)
 
@@ -864,9 +835,7 @@ async def test_handler_updates_last_check_even_when_no_messages(
     no_msg_at = NoMessageAlertType()
 
     dest_id = await internal_db.create_destination(
-        NewDestination(
-            notifier="custom-test-notifier", label="No Msg Test", config={}
-        )
+        NewDestination(notifier="custom-test-notifier", label="No Msg Test", config={})
     )
     params = NewAlertRouteParameters(
         database_name="data",
@@ -874,9 +843,7 @@ async def test_handler_updates_last_check_even_when_no_messages(
         alert_type="custom:no-msg-type",
         frequency="+5 minutes",
         custom_config={},
-        subscriptions=[
-            NewSubscription(destination_id=dest_id, meta={})
-        ],
+        subscriptions=[NewSubscription(destination_id=dest_id, meta={})],
     )
     alert_id = await internal_db.new_alert(params)
 
@@ -896,9 +863,9 @@ async def test_handler_updates_last_check_even_when_no_messages(
 
     # last_check_at MUST be updated even though no messages were produced
     alert = await internal_db.get_alert_for_check(alert_id)
-    assert alert.last_check_at is not None, (
-        "last_check_at was not updated when check() returned empty list"
-    )
+    assert (
+        alert.last_check_at is not None
+    ), "last_check_at was not updated when check() returned empty list"
 
 
 @pytest.mark.asyncio
@@ -913,9 +880,7 @@ async def test_cron_task_uses_correct_handler_name(datasette_instance, internal_
             config={},
         )
     )
-    cookies = {
-        "ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")
-    }
+    cookies = {"ds_actor": datasette_instance.sign({"a": {"id": "root"}}, "actor")}
     response = await datasette_instance.client.post(
         "/-/data/datasette-alerts/api/new",
         json={
@@ -935,9 +900,9 @@ async def test_cron_task_uses_correct_handler_name(datasette_instance, internal_
     assert task is not None
 
     # Must be "alerts:custom-check", NOT "datasette-alerts:custom-check"
-    assert task.handler == "alerts:custom-check", (
-        f"Expected handler 'alerts:custom-check', got '{task['handler']}'"
-    )
+    assert (
+        task.handler == "alerts:custom-check"
+    ), f"Expected handler 'alerts:custom-check', got '{task['handler']}'"
 
 
 @pytest.mark.asyncio

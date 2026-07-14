@@ -156,7 +156,9 @@ async def cursor_alert_handler(datasette, config):
     )
     new_ids = [row[0] for row in result]
     cursor = max([row[1] for row in result], default=cursor)
-    logger.debug("cursor check: alert=%s new_ids=%s cursor=%s", alert_id, new_ids, cursor)
+    logger.debug(
+        "cursor check: alert=%s new_ids=%s cursor=%s", alert_id, new_ids, cursor
+    )
     await internal_db.add_log(alert_id, new_ids, cursor)
 
     if len(new_ids) > 0:

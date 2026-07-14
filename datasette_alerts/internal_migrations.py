@@ -6,8 +6,7 @@ internal_migrations = Migrations("datasette-alerts.internal")
 
 @internal_migrations()
 def m001_initial(db: Database):
-    db.executescript(
-        """
+    db.executescript("""
           create table datasette_alerts_alerts(
             id text primary key,
             alert_creator_id text,
@@ -35,26 +34,22 @@ def m001_initial(db: Database):
             new_ids json,
             cursor any
           );
-        """
-    )
+        """)
 
 
 @internal_migrations()
 def m002_trigger_alerts(db: Database):
-    db.executescript(
-        """
+    db.executescript("""
           ALTER TABLE datasette_alerts_alerts
             ADD COLUMN alert_type TEXT NOT NULL DEFAULT 'cursor';
           ALTER TABLE datasette_alerts_alerts
             ADD COLUMN filter_params TEXT;
-        """
-    )
+        """)
 
 
 @internal_migrations()
 def m003_destinations(db: Database):
-    db.executescript(
-        """
+    db.executescript("""
           CREATE TABLE datasette_alerts_destinations (
             id TEXT PRIMARY KEY,
             notifier TEXT NOT NULL,
@@ -66,15 +61,12 @@ def m003_destinations(db: Database):
 
           ALTER TABLE datasette_alerts_subscriptions
             ADD COLUMN destination_id TEXT REFERENCES datasette_alerts_destinations(id);
-        """
-    )
+        """)
 
 
 @internal_migrations()
 def m004_custom_alerts(db: Database):
-    db.executescript(
-        """
+    db.executescript("""
           ALTER TABLE datasette_alerts_alerts ADD COLUMN custom_config TEXT DEFAULT '{}';
           ALTER TABLE datasette_alerts_alerts ADD COLUMN last_check_at TEXT;
-        """
-    )
+        """)

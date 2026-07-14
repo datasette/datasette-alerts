@@ -6,7 +6,6 @@ import httpx
 from wtforms import Form, StringField
 
 
-
 @hookimpl
 def datasette_alerts_register_notifiers(datasette):
     return [SlackNotifier()]

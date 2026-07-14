@@ -39,9 +39,7 @@ class MockNotifier(Notifier):
 
     async def send(self, config, message):
         """Record sent messages for testing."""
-        self.sent_messages.append(
-            {"config": config, "message": message}
-        )
+        self.sent_messages.append({"config": config, "message": message})
 
     async def get_config_form(self):
         """Return a simple config form."""
@@ -58,27 +56,21 @@ async def datasette(tmpdir):
     data = str(tmpdir / "data.db")
     db = sqlite3.connect(data)
     with db:
-        db.execute(
-            """
+        db.execute("""
             create table events (
                 id integer primary key,
                 title text,
                 created_at timestamp default current_timestamp
             )
-        """
-        )
-        db.execute(
-            """
+        """)
+        db.execute("""
             insert into events (title, created_at)
             values ('Event 1', '2024-01-01 10:00:00')
-        """
-        )
-        db.execute(
-            """
+        """)
+        db.execute("""
             insert into events (title, created_at)
             values ('Event 2', '2024-01-01 11:00:00')
-        """
-        )
+        """)
 
     datasette = Datasette(
         [data],
@@ -116,7 +108,11 @@ async def test_internal_db_new_alert(datasette):
 
     # Create a destination first
     dest_id = await internal_db.create_destination(
-        NewDestination(notifier="test-notifier", label="Test Dest", config={"url": "https://example.com"})
+        NewDestination(
+            notifier="test-notifier",
+            label="Test Dest",
+            config={"url": "https://example.com"},
+        )
     )
 
     params = NewAlertRouteParameters(
@@ -333,7 +329,11 @@ async def test_api_new_alert_endpoint(datasette):
     """Test the API endpoint for creating alerts with a destination."""
     internal_db = InternalDB(datasette.get_internal_database())
     dest_id = await internal_db.create_destination(
-        NewDestination(notifier="test-notifier", label="Test", config={"url": "https://example.com"})
+        NewDestination(
+            notifier="test-notifier",
+            label="Test",
+            config={"url": "https://example.com"},
+        )
     )
 
     cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
@@ -343,9 +343,7 @@ async def test_api_new_alert_endpoint(datasette):
         "id_columns": ["id"],
         "timestamp_column": "created_at",
         "frequency": "+1 hour",
-        "subscriptions": [
-            {"destination_id": dest_id, "meta": {"aggregate": True}}
-        ],
+        "subscriptions": [{"destination_id": dest_id, "meta": {"aggregate": True}}],
     }
 
     response = await datasette.client.post(
@@ -434,10 +432,7 @@ async def test_table_action_link_with_permission(datasette):
 
     # Check that the alert configuration link is present
     assert "Configure new row alert" in response.text
-    assert (
-        "/-/data/datasette-alerts/new?table_name=events"
-        in response.text
-    )
+    assert "/-/data/datasette-alerts/new?table_name=events" in response.text
 
 
 @pytest.mark.asyncio
@@ -572,7 +567,11 @@ async def test_destination_crud(datasette):
 
     # Create
     dest_id = await internal_db.create_destination(
-        NewDestination(notifier="slack", label="Ops Channel", config={"webhook_url": "https://hooks.slack.com/1"})
+        NewDestination(
+            notifier="slack",
+            label="Ops Channel",
+            config={"webhook_url": "https://hooks.slack.com/1"},
+        )
     )
     assert dest_id is not None
 
@@ -589,7 +588,9 @@ async def test_destination_crud(datasette):
     assert any(d.id == dest_id for d in dests)
 
     # Update
-    await internal_db.update_destination(dest_id, "Ops Channel v2", {"webhook_url": "https://hooks.slack.com/2"})
+    await internal_db.update_destination(
+        dest_id, "Ops Channel v2", {"webhook_url": "https://hooks.slack.com/2"}
+    )
     updated = await internal_db.get_destination(dest_id)
     assert updated.label == "Ops Channel v2"
     assert updated.config == {"webhook_url": "https://hooks.slack.com/2"}
@@ -614,7 +615,11 @@ async def test_alert_detail_includes_destination_info(datasette):
     internal_db = InternalDB(datasette.get_internal_database())
 
     dest_id = await internal_db.create_destination(
-        NewDestination(notifier="slack", label="My Slack", config={"webhook_url": "https://example.com"})
+        NewDestination(
+            notifier="slack",
+            label="My Slack",
+            config={"webhook_url": "https://example.com"},
+        )
     )
 
     params = NewAlertRouteParameters(
@@ -647,7 +652,11 @@ async def test_api_create_destination(datasette):
     cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
     response = await datasette.client.post(
         "/-/data/datasette-alerts/api/destinations/new",
-        json={"notifier": "slack", "label": "Test Slack", "config": {"webhook_url": "https://hooks.slack.com/test"}},
+        json={
+            "notifier": "slack",
+            "label": "Test Slack",
+            "config": {"webhook_url": "https://hooks.slack.com/test"},
+        },
         cookies=cookies,
     )
     assert response.status_code == 200
@@ -661,7 +670,9 @@ async def test_api_update_destination(datasette):
     """Test updating a destination via API."""
     internal_db = InternalDB(datasette.get_internal_database())
     dest_id = await internal_db.create_destination(
-        NewDestination(notifier="slack", label="Old Label", config={"webhook_url": "https://old"})
+        NewDestination(
+            notifier="slack", label="Old Label", config={"webhook_url": "https://old"}
+        )
     )
 
     cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
@@ -727,6 +738,7 @@ class _MockNotifierPlugin:
 
 
 from datasette.plugins import pm as _pm
+
 _pm.register(_MockNotifierPlugin(), name="test-mock-notifier-plugin")
 
 
@@ -735,7 +747,9 @@ async def test_send_to_destination(datasette):
     """Test the public send_to_destination() API."""
     internal_db = InternalDB(datasette.get_internal_database())
     dest_id = await internal_db.create_destination(
-        NewDestination(notifier="mock-notifier", label="Test Mock", config={"key": "value"})
+        NewDestination(
+            notifier="mock-notifier", label="Test Mock", config={"key": "value"}
+        )
     )
 
     _mock_notifier_instance.sent_messages.clear()
@@ -744,7 +758,10 @@ async def test_send_to_destination(datasette):
 
     assert len(_mock_notifier_instance.sent_messages) == 1
     assert _mock_notifier_instance.sent_messages[0]["config"] == {"key": "value"}
-    assert _mock_notifier_instance.sent_messages[0]["message"].text == "Hello from a plugin!"
+    assert (
+        _mock_notifier_instance.sent_messages[0]["message"].text
+        == "Hello from a plugin!"
+    )
     assert _mock_notifier_instance.sent_messages[0]["message"].subject == "Test"
 
 
@@ -772,6 +789,7 @@ async def test_send_to_destination_notifier_not_found(datasette):
 def test_config_element():
     """Test ConfigElement model."""
     from datasette_alerts import ConfigElement
+
     ce = ConfigElement(tag="my-form", scripts=["/-/static/my-plugin/config.js"])
     assert ce.tag == "my-form"
     assert ce.scripts == ["/-/static/my-plugin/config.js"]
