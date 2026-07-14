@@ -392,25 +392,31 @@ async def test_api_new_alert_invalid_database(datasette):
 
 @pytest.mark.asyncio
 async def test_api_new_alert_invalid_payload(datasette):
-    """Test API endpoint with invalid payload returns an error."""
+    """Test API endpoint with invalid payload returns a validation error."""
     cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
     response = await datasette.client.post(
         "/-/data/datasette-alerts/api/new", json={"invalid": "payload"}, cookies=cookies
     )
 
-    assert response.status_code == 500
+    assert response.status_code == 400
+    data = response.json()
+    assert data["error"]
+    assert data["errors"]
 
 
 @pytest.mark.asyncio
 async def test_api_new_alert_wrong_method(datasette):
-    """Test API endpoint with GET instead of POST returns 404."""
+    """Test API endpoint with GET instead of POST returns a validation error."""
     cookies = {"ds_actor": datasette.sign({"a": {"id": "root"}}, "actor")}
     response = await datasette.client.get(
         "/-/data/datasette-alerts/api/new", cookies=cookies
     )
 
-    # GET hits the route but body parsing fails
-    assert response.status_code == 500
+    # GET hits the route but its empty body fails validation
+    assert response.status_code == 400
+    data = response.json()
+    assert data["error"]
+    assert data["errors"]
 
 
 @pytest.mark.asyncio
